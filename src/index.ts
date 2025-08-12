@@ -191,8 +191,10 @@ app.post('/token', async (c) => {
     return c.json<TokenErrorResponse>({ error: 'unsupported_grant_type', error_description: 'invalid grant_type' }, 400);
   }
 
+  const isPkceFlowRequest = !!body.code_verifier;
+
   // Validate client_id
-  if (body.client_id !== c.env.OIDC_CLIENT_ID) {
+  if (!isPkceFlowRequest && body.client_id !== c.env.OIDC_CLIENT_ID) {
 		console.log('Invalid client_id:', body.client_id);
     return c.json<TokenErrorResponse>({ error: 'invalid_client', error_description: 'invalid client_id' }, 401);
   }
@@ -201,8 +203,6 @@ app.post('/token', async (c) => {
   if (!body.code) {
     return c.json<TokenErrorResponse>({ error: 'invalid_request', error_description: 'code is required' }, 400);
   }
-
-  const isPkceFlowRequest = !!body.code_verifier;
 
 	if (!isPkceFlowRequest && body.client_secret !== c.env.OIDC_CLIENT_SECRET) {
 		console.log('Invalid client_secret:', body.client_secret);
