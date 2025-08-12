@@ -183,6 +183,7 @@ app.get('/callback', async (c) => {
 app.post('/token', async (c) => {
   const issuer = new URL(c.req.url).origin;
   const body = await c.req.parseBody();
+	console.log(await c.req.text())
 
   // Validate request
   if (body.grant_type !== 'authorization_code') {
