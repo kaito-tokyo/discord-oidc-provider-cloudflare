@@ -105,7 +105,7 @@ app.get('/auth', async (c) => {
     .setIssuer(new URL(c.req.url).origin)
     .setAudience(c.env.DISCORD_CLIENT_ID)
     .setExpirationTime('10m')
-    .sign(new TextEncoder().encode(c.env.STATE_SECRET));
+    .sign(base64urlToUint8Array(c.env.STATE_SECRET));
 
   const discordAuthUrl = new URL('https://discord.com/api/oauth2/authorize');
   discordAuthUrl.searchParams.set('client_id', c.env.DISCORD_CLIENT_ID);
@@ -126,7 +126,7 @@ app.get('/callback', async (c) => {
   if (!state) throw new HTTPException(400, { message: 'state is required' });
 
   // Verify the state (JWT)
-  const { payload: statePayload } = await jwtVerify(state, new TextEncoder().encode(c.env.STATE_SECRET), {
+  const { payload: statePayload } = await jwtVerify(state, base64urlToUint8Array(c.env.STATE_SECRET), {
     issuer: issuer,
     audience: c.env.DISCORD_CLIENT_ID,
   });
@@ -180,7 +180,10 @@ app.post('/token', async (c) => {
 
   // Validate request
   if (body.grant_type !== 'authorization_code') throw new HTTPException(400, { message: 'invalid grant_type' });
-  if (body.client_id !== c.env.OIDC_CLIENT_ID || body.client_secret !== c.env.OIDC_CLIENT_SECRET) {
+
+  // Allow client_secret to be omitted if PKCE is used
+  const isPkceFlow = !!body.code_verifier;
+  if (body.client_id !== c.env.OIDC_CLIENT_ID || (!isPkceFlow && body.client_secret !== c.env.OIDC_CLIENT_SECRET)) {
     throw new HTTPException(401, { message: 'invalid client credentials' });
   }
   if (!body.code) throw new HTTPException(400, { message: 'code is required' });
