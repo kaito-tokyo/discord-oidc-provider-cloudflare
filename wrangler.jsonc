@@ -12,7 +12,20 @@
 	},
 	"vars": {
 		"DISCORD_CLIENT_ID": "1404871693767544893",
-		"OIDC_CLIENT_ID": "kaito-tokyo-discord-oidc-provider-cloudflare",
+		"OIDC_CLIENT_ID": "kaito-tokyo-discord-oidc-provider-cloudflare"
+	},
+	"env": {
+		"test": {
+            "vars": {
+				"DISCORD_CLIENT_SECRET": "discord-client-secret",
+                "CODE_SECRET": "a-very-secret-secret-key-that-is-long-enough",
+                "DISCORD_CLIENT_ID": "discord-client-id",
+                "JWT_PRIVATE_KEY": "{\"kty\":\"EC\",\"crv\":\"P-256\",\"x\":\"f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU\",\"y\":\"x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0\",\"d\":\"jpsQnnGQmL-YBIffH1136cspYG6-0iY7X1fCE9-E9LI\",\"kid\":\"1\"}",
+                "OIDC_CLIENT_ID": "test-client-id",
+                "OIDC_REDIRECT_URI": "http://localhost/callback",
+                "STATE_SECRET": "a-very-secret-secret-key-that-is-long-enough",
+            }
+        }
 	}
 	/**
 	 * Smart Placement
