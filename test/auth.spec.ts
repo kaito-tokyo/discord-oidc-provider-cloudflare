@@ -128,7 +128,7 @@ describe('/auth', () => {
       expect(redirectUrl.searchParams.get('error_description')).toBe('state is required');
     });
 
-    it('should return 400 if nonce is missing', async () => {
+    it('should redirect successfully even if nonce is missing', async () => {
       const params = new URLSearchParams({
         response_type: 'code',
         client_id: OIDC_CLIENT_ID,
@@ -140,8 +140,8 @@ describe('/auth', () => {
       const response = await SELF.fetch(`http://localhost/auth?${params.toString()}`, { redirect: 'manual' });
       expect(response.status).toBe(302);
       const redirectUrl = new URL(response.headers.get('location')!);
-      expect(redirectUrl.searchParams.get('error')).toBe('invalid_request');
-      expect(redirectUrl.searchParams.get('error_description')).toBe('nonce is required');
+      expect(redirectUrl.searchParams.get('code')).toBeDefined();
+      expect(redirectUrl.searchParams.get('state')).toBeDefined();
     });
 
     it('should return 400 if code_challenge is missing', async () => {

@@ -186,7 +186,7 @@ app.post('/token', async (c) => {
   if (!body.code) throw new HTTPException(400, { message: 'code is required' });
 
   // Decrypt the authorization code (JWE)
-  const { payload: codePayload } = await jwtDecrypt(body.code as string, new TextEncoder().encode(c.env.CODE_SECRET), {
+  const { payload: codePayload } = await jwtDecrypt(body.code as string, base64urlToUint8Array(c.env.CODE_SECRET), {
     issuer: issuer,
     audience: c.env.OIDC_CLIENT_ID,
   });
