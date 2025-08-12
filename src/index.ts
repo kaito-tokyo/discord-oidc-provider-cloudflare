@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import { SignJWT, jwtVerify, EncryptJWT, jwtDecrypt, importJWK } from 'jose';
 import type { JWK } from 'jose';
+import { v7 as uuidv7 } from 'uuid';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -67,7 +68,7 @@ app.get('/auth', async (c) => {
 
   // Pack the original request info into a JWT and pass it to Discord as state
   const stateJwt = await new SignJWT({
-    jti: crypto.randomUUID(),
+    jti: uuidv7(),
     original_state: state,
     redirect_uri: redirect_uri,
     nonce: nonce,

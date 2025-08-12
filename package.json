@@ -11,10 +11,12 @@
 	},
 	"dependencies": {
 		"hono": "^4.5.1",
-		"jose": "^5.6.3"
+		"jose": "^5.6.3",
+		"uuid": "^11.1.0"
 	},
 	"devDependencies": {
 		"@cloudflare/vitest-pool-workers": "^0.8.19",
+		"@types/uuid": "^10.0.0",
 		"jose-cli": "^2.0.3",
 		"typescript": "^5.5.2",
 		"vitest": "~3.2.0",

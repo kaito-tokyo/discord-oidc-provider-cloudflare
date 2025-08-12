@@ -19,6 +19,7 @@ describe('OIDC Provider', () => {
       scopes_supported: ['openid', 'profile', 'email'],
       token_endpoint_auth_methods_supported: ['client_secret_post'],
       claims_supported: ['sub', 'iss', 'aud', 'exp', 'iat', 'nonce', 'name', 'picture', 'email'],
+      code_challenge_methods_supported: ['S256'],
     });
   });
 
