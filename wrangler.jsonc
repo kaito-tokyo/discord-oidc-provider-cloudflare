@@ -12,7 +12,8 @@
 	},
 	"vars": {
 		"DISCORD_CLIENT_ID": "1404871693767544893",
-		"OIDC_CLIENT_ID": "kaito-tokyo-discord-oidc-provider-cloudflare"
+		"OIDC_CLIENT_ID": "kaito-tokyo-discord-oidc-provider-cloudflare",
+		"OIDC_REDIRECT_URI": "https://kaito-tokyo.cloudflareaccess.com/cdn-cgi/access/callback"
 	},
 	"env": {
 		"test": {
