@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 
 describe('OIDC Provider', () => {
   it('should return OpenID configuration', async () => {
-    const response = await SELF.fetch('http://localhost/.well-known/openid-configuration');
+    const response = await SELF.fetch('http://localhost/.well-known/openid-configuration', { redirect: 'manual' });
     expect(response.status).toBe(200);
     const body = await response.json();
     const issuer = 'http://localhost';
@@ -34,7 +34,7 @@ describe('OIDC Provider', () => {
     };
     vi.stubEnv('JWT_PRIVATE_KEY', JSON.stringify(privateJwk));
 
-    const response = await SELF.fetch('http://localhost/jwks.json');
+    const response = await SELF.fetch('http://localhost/jwks.json', { redirect: 'manual' });
     expect(response.status).toBe(200);
     const body = await response.json() as any;
     expect(body.keys).toBeInstanceOf(Array);
@@ -48,4 +48,6 @@ describe('OIDC Provider', () => {
     expect(typeof jwk.x).toBe('string');
     expect(typeof jwk.y).toBe('string');
   });
+
+  
 });
