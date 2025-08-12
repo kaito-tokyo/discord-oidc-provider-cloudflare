@@ -3,7 +3,15 @@
 // Runtime types generated with workerd@1.20250803.0 2025-08-12 
 declare namespace Cloudflare {
 	interface Env {
-	}
+	DISCORD_CLIENT_ID: string;
+	DISCORD_CLIENT_SECRET: string;
+	JWT_PRIVATE_KEY: string;
+	OIDC_CLIENT_ID: string;
+	OIDC_CLIENT_SECRET: string;
+	OIDC_REDIRECT_URI: string;
+	STATE_SECRET: string;
+	CODE_SECRET: string;
+}
 }
 interface Env extends Cloudflare.Env {}
 

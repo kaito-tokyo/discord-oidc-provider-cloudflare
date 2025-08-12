@@ -4,11 +4,21 @@
  */
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "discord-oidc-provider-cloudflare",
+	"name": "kaito-tokyo-discord-oidc-provider-cloudflare",
 	"main": "src/index.ts",
-	"compatibility_date": "2025-08-12",
+	"compatibility_date": "2025-08-03",
 	"observability": {
 		"enabled": true
+	},
+	"vars": {
+		"DISCORD_CLIENT_ID": "your-discord-client-id",
+		"DISCORD_CLIENT_SECRET": "your-discord-client-secret",
+		"JWT_PRIVATE_KEY": "your-jwt-private-key",
+		"OIDC_CLIENT_ID": "your-oidc-client-id",
+		"OIDC_REDIRECT_URI": "http://localhost:8788/callback",
+		"STATE_SECRET": "a-very-secret-string-for-state",
+		"CODE_SECRET": "a-very-secret-string-for-code-encryption",
+		"OIDC_CLIENT_SECRET": "your-oidc-client-secret"
 	}
 	/**
 	 * Smart Placement
