@@ -57,8 +57,10 @@ describe('/auth', () => {
       code_challenge: 'test_code_challenge',
     });
     const response = await SELF.fetch(`http://localhost/auth?${params.toString()}`, { redirect: 'manual' });
-    expect(response.status).toBe(400);
-    expect(await response.text()).toEqual('invalid response_type');
+    expect(response.status).toBe(302);
+    const redirectUrl = new URL(response.headers.get('location')!);
+    expect(redirectUrl.searchParams.get('error')).toBe('invalid_request');
+    expect(redirectUrl.searchParams.get('error_description')).toBe('invalid response_type');
   });
 
   it('should return 400 for invalid client_id', async () => {
@@ -72,8 +74,10 @@ describe('/auth', () => {
       code_challenge: 'test_code_challenge',
     });
     const response = await SELF.fetch(`http://localhost/auth?${params.toString()}`, { redirect: 'manual' });
-    expect(response.status).toBe(400);
-    expect(await response.text()).toEqual('invalid client_id');
+    expect(response.status).toBe(302);
+    const redirectUrl = new URL(response.headers.get('location')!);
+    expect(redirectUrl.searchParams.get('error')).toBe('unauthorized_client');
+    expect(redirectUrl.searchParams.get('error_description')).toBe('invalid client_id');
   });
 
   it('should return 400 for invalid redirect_uri', async () => {
@@ -102,8 +106,10 @@ describe('/auth', () => {
       code_challenge: 'test_code_challenge',
     });
     const response = await SELF.fetch(`http://localhost/auth?${params.toString()}`, { redirect: 'manual' });
-    expect(response.status).toBe(400);
-    expect(await response.text()).toEqual('invalid scope');
+    expect(response.status).toBe(302);
+    const redirectUrl = new URL(response.headers.get('location')!);
+    expect(redirectUrl.searchParams.get('error')).toBe('invalid_scope');
+    expect(redirectUrl.searchParams.get('error_description')).toBe('invalid scope');
   });
 
   it('should return 400 if state is missing', async () => {
@@ -116,8 +122,10 @@ describe('/auth', () => {
         code_challenge: 'test_code_challenge',
       });
       const response = await SELF.fetch(`http://localhost/auth?${params.toString()}`, { redirect: 'manual' });
-      expect(response.status).toBe(400);
-      expect(await response.text()).toEqual('state is required');
+      expect(response.status).toBe(302);
+      const redirectUrl = new URL(response.headers.get('location')!);
+      expect(redirectUrl.searchParams.get('error')).toBe('invalid_request');
+      expect(redirectUrl.searchParams.get('error_description')).toBe('state is required');
     });
 
     it('should return 400 if nonce is missing', async () => {
@@ -130,8 +138,10 @@ describe('/auth', () => {
         code_challenge: 'test_code_challenge',
       });
       const response = await SELF.fetch(`http://localhost/auth?${params.toString()}`, { redirect: 'manual' });
-      expect(response.status).toBe(400);
-      expect(await response.text()).toEqual('nonce is required');
+      expect(response.status).toBe(302);
+      const redirectUrl = new URL(response.headers.get('location')!);
+      expect(redirectUrl.searchParams.get('error')).toBe('invalid_request');
+      expect(redirectUrl.searchParams.get('error_description')).toBe('nonce is required');
     });
 
     it('should return 400 if code_challenge is missing', async () => {
@@ -144,8 +154,10 @@ describe('/auth', () => {
         nonce: 'test_nonce',
       });
       const response = await SELF.fetch(`http://localhost/auth?${params.toString()}`, { redirect: 'manual' });
-      expect(response.status).toBe(400);
-      expect(await response.text()).toEqual('code_challenge is required');
+      expect(response.status).toBe(302);
+      const redirectUrl = new URL(response.headers.get('location')!);
+      expect(redirectUrl.searchParams.get('error')).toBe('invalid_request');
+      expect(redirectUrl.searchParams.get('error_description')).toBe('code_challenge is required');
     });
 
     it('should return 400 if code_challenge_method is not supported', async () => {
@@ -160,7 +172,9 @@ describe('/auth', () => {
         code_challenge_method: 'plain', // Not supported
       });
       const response = await SELF.fetch(`http://localhost/auth?${params.toString()}`, { redirect: 'manual' });
-      expect(response.status).toBe(400);
-      expect(await response.text()).toEqual('code_challenge_method is not supported');
+      expect(response.status).toBe(302);
+      const redirectUrl = new URL(response.headers.get('location')!);
+      expect(redirectUrl.searchParams.get('error')).toBe('invalid_request');
+      expect(redirectUrl.searchParams.get('error_description')).toBe('code_challenge_method is not supported');
     });
 });

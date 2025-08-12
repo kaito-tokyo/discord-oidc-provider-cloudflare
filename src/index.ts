@@ -52,15 +52,30 @@ app.get('/auth', async (c) => {
     c.req.query();
 
   // Validate parameters
-  if (response_type !== 'code') throw new HTTPException(400, { message: 'invalid response_type' });
-  if (client_id !== c.env.OIDC_CLIENT_ID) throw new HTTPException(400, { message: 'invalid client_id' });
-  if (redirect_uri !== c.env.OIDC_REDIRECT_URI) throw new HTTPException(400, { message: 'invalid redirect_uri' });
-  if (!scope?.includes('openid')) throw new HTTPException(400, { message: 'invalid scope' });
-  if (!state) throw new HTTPException(400, { message: 'state is required' });
-  if (!nonce) throw new HTTPException(400, { message: 'nonce is required' });
-  if (!code_challenge) throw new HTTPException(400, { message: 'code_challenge is required' });
+  // Validate redirect_uri first, as it's crucial for error redirection
+  if (redirect_uri !== c.env.OIDC_REDIRECT_URI) {
+    throw new HTTPException(400, { message: 'invalid redirect_uri' });
+  }
+
+  const redirectToError = (error: string, error_description: string) => {
+    // At this point, redirect_uri is guaranteed to be valid due to the check above
+    const redirectUrl = new URL(redirect_uri);
+    redirectUrl.searchParams.set('error', error);
+    redirectUrl.searchParams.set('error_description', error_description);
+    if (state) {
+      redirectUrl.searchParams.set('state', state);
+    }
+    return c.redirect(redirectUrl.toString());
+  };
+
+  if (response_type !== 'code') return redirectToError('invalid_request', 'invalid response_type');
+  if (client_id !== c.env.OIDC_CLIENT_ID) return redirectToError('unauthorized_client', 'invalid client_id');
+  if (!scope?.includes('openid')) return redirectToError('invalid_scope', 'invalid scope');
+  if (!state) return redirectToError('invalid_request', 'state is required');
+  if (!nonce) return redirectToError('invalid_request', 'nonce is required');
+  if (!code_challenge) return redirectToError('invalid_request', 'code_challenge is required');
   if (code_challenge_method && code_challenge_method !== 'S256') {
-    throw new HTTPException(400, { message: 'code_challenge_method is not supported' });
+    return redirectToError('invalid_request', 'code_challenge_method is not supported');
   }
 
   const discordScopes = ['identify'];
