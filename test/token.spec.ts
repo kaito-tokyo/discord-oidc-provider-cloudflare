@@ -122,7 +122,7 @@ describe('/token endpoint', () => {
     });
 
     expect(response.status).toBe(400);
-    expect(await response.text()).toBe('invalid grant_type');
+    expect(await response.json()).toEqual({ error: 'unsupported_grant_type', error_description: 'invalid grant_type' });
   });
 
   it('should return 401 for invalid client_id', async () => {
@@ -140,7 +140,7 @@ describe('/token endpoint', () => {
     });
 
     expect(response.status).toBe(401);
-    expect(await response.text()).toBe('invalid client credentials');
+    expect(await response.json()).toEqual({ error: 'invalid_client', error_description: 'invalid client_id' });
   });
 
   it('should return 401 for invalid client_secret when PKCE is not used', async () => {
@@ -158,7 +158,7 @@ describe('/token endpoint', () => {
     });
 
     expect(response.status).toBe(401);
-    expect(await response.text()).toBe('invalid client credentials');
+    expect(await response.json()).toEqual({ error: 'invalid_client', error_description: 'client_secret is required or invalid' });
   });
 
   it('should return 400 if code is missing', async () => {
@@ -175,7 +175,7 @@ describe('/token endpoint', () => {
     });
 
     expect(response.status).toBe(400);
-    expect(await response.text()).toBe('code is required');
+    expect(await response.json()).toEqual({ error: 'invalid_request', error_description: 'code is required' });
   });
 
   it('should return 400 if code_verifier is missing for PKCE flow', async () => {
@@ -213,7 +213,7 @@ describe('/token endpoint', () => {
     });
 
     expect(response.status).toBe(401);
-    expect(await response.text()).toBe('invalid client credentials');
+    expect(await response.json()).toEqual({ error: 'invalid_client', error_description: 'client_secret is required or invalid' });
   });
 
   it('should return 401 for invalid code_verifier', async () => {
@@ -251,7 +251,7 @@ describe('/token endpoint', () => {
     });
 
     expect(response.status).toBe(401);
-    expect(await response.text()).toBe('invalid code_verifier');
+    expect(await response.json()).toEqual({ error: 'invalid_grant', error_description: 'invalid code_verifier' });
   });
 
   it('should return 500 if Discord user info fetch fails', async () => {
@@ -293,6 +293,6 @@ describe('/token endpoint', () => {
     });
 
     expect(response.status).toBe(500);
-    expect(await response.text()).toBe('Failed to fetch user from Discord');
+    expect(await response.json()).toEqual({ error: 'server_error', error_description: 'Failed to fetch user from Discord' });
   });
 });

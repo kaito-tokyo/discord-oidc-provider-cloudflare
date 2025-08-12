@@ -4,6 +4,12 @@ import { SignJWT, jwtVerify, EncryptJWT, jwtDecrypt, importJWK } from 'jose';
 import type { JWK } from 'jose';
 import { v7 as uuidv7 } from 'uuid';
 
+interface TokenErrorResponse {
+  error: string;
+  error_description?: string;
+  error_uri?: string;
+}
+
 const base64urlToUint8Array = (base64url: string): Uint8Array => {
   const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/');
   const bin = atob(base64);
@@ -179,31 +185,59 @@ app.post('/token', async (c) => {
   const body = await c.req.parseBody();
 
   // Validate request
-  if (body.grant_type !== 'authorization_code') throw new HTTPException(400, { message: 'invalid grant_type' });
-
-  // Allow client_secret to be omitted if PKCE is used
-  const isPkceFlow = !!body.code_verifier;
-  if (body.client_id !== c.env.OIDC_CLIENT_ID || (!isPkceFlow && body.client_secret !== c.env.OIDC_CLIENT_SECRET)) {
-    throw new HTTPException(401, { message: 'invalid client credentials' });
+  if (body.grant_type !== 'authorization_code') {
+    return c.json<TokenErrorResponse>({ error: 'unsupported_grant_type', error_description: 'invalid grant_type' }, 400);
   }
-  if (!body.code) throw new HTTPException(400, { message: 'code is required' });
 
-  // Decrypt the authorization code (JWE)
-  const { payload: codePayload } = await jwtDecrypt(body.code as string, base64urlToUint8Array(c.env.CODE_SECRET), {
-    issuer: issuer,
-    audience: c.env.OIDC_CLIENT_ID,
-  });
+  // Validate client_id
+  if (body.client_id !== c.env.OIDC_CLIENT_ID) {
+    return c.json<TokenErrorResponse>({ error: 'invalid_client', error_description: 'invalid client_id' }, 401);
+  }
 
-  // PKCE verification
-  const code_verifier = body.code_verifier as string;
-  if (!code_verifier) throw new HTTPException(400, { message: 'code_verifier is required' });
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(code_verifier));
-  const challenge = btoa(String.fromCharCode(...new Uint8Array(digest)))
-    .replace(/=/g, '')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_');
-  if (challenge !== codePayload.code_challenge) {
-    throw new HTTPException(401, { message: 'invalid code_verifier' });
+  // Validate code
+  if (!body.code) {
+    return c.json<TokenErrorResponse>({ error: 'invalid_request', error_description: 'code is required' }, 400);
+  }
+
+  const isPkceFlowRequest = !!body.code_verifier;
+
+	if (!isPkceFlowRequest && body.client_secret !== c.env.OIDC_CLIENT_SECRET) {
+    return c.json<TokenErrorResponse>({ error: 'invalid_client', error_description: 'client_secret is required or invalid' }, 401);
+	}
+
+  // Decrypt the authorization code (JWE) early to get codePayload
+  let codePayload;
+  try {
+    const { payload } = await jwtDecrypt(body.code as string, base64urlToUint8Array(c.env.CODE_SECRET), {
+      issuer: issuer,
+      audience: c.env.OIDC_CLIENT_ID,
+    });
+    codePayload = payload;
+  } catch (e) {
+    return c.json<TokenErrorResponse>({ error: 'invalid_grant', error_description: 'invalid authorization code' }, 400);
+  }
+
+  const isPkceFlowCode = !!codePayload.code_challenge;
+
+  // Handle PKCE vs. non-PKCE flows
+  if (isPkceFlowCode) { // The authorization code was issued for a PKCE flow
+    if (!isPkceFlowRequest) { // But the token request is missing code_verifier
+      return c.json<TokenErrorResponse>({ error: 'invalid_request', error_description: 'code_verifier is required for PKCE flow' }, 400);
+    }
+    // Perform PKCE challenge verification
+    const code_verifier = body.code_verifier as string;
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(code_verifier));
+    const challenge = btoa(String.fromCharCode(...new Uint8Array(digest)))
+      .replace(/=/g, '')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_');
+    if (challenge !== codePayload.code_challenge) {
+      return c.json<TokenErrorResponse>({ error: 'invalid_grant', error_description: 'invalid code_verifier' }, 401);
+    }
+  } else { // The authorization code was issued for a non-PKCE flow
+    if (isPkceFlowRequest) { // But the token request includes code_verifier
+      return c.json<TokenErrorResponse>({ error: 'invalid_request', error_description: 'PKCE code_verifier not expected for non-PKCE flow' }, 400);
+    }
   }
 
   // Fetch user information from Discord
@@ -212,7 +246,8 @@ app.post('/token', async (c) => {
   });
 
   if (!userResponse.ok) {
-    throw new HTTPException(500, { message: 'Failed to fetch user from Discord' });
+    console.error('Discord token exchange failed:', await userResponse.text());
+    return c.json<TokenErrorResponse>({ error: 'server_error', error_description: 'Failed to fetch user from Discord' }, 500);
   }
   const user = (await userResponse.json()) as { id: string; username: string; avatar: string; email?: string; verified?: boolean };
 
