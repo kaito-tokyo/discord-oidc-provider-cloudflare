@@ -232,7 +232,7 @@ app.post('/token', async (c) => {
       .replace(/\+/g, '-')
       .replace(/\//g, '_');
     if (challenge !== codePayload.code_challenge) {
-      return c.json<TokenErrorResponse>({ error: 'invalid_grant', error_description: 'invalid code_verifier' }, 401);
+      return c.json<TokenErrorResponse>({ error: 'invalid_grant', error_description: 'invalid code_verifier' }, 400);
     }
   } else { // The authorization code was issued for a non-PKCE flow
     if (isPkceFlowRequest) { // But the token request includes code_verifier

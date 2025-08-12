@@ -250,7 +250,7 @@ describe('/token endpoint', () => {
       body: formData.toString(),
     });
 
-    expect(response.status).toBe(401);
+    expect(response.status).toBe(400);
     expect(await response.json()).toEqual({ error: 'invalid_grant', error_description: 'invalid code_verifier' });
   });
 
