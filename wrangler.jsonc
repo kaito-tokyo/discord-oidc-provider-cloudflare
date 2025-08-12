@@ -11,14 +11,7 @@
 		"enabled": true
 	},
 	"vars": {
-		"DISCORD_CLIENT_ID": "your-discord-client-id",
-		"DISCORD_CLIENT_SECRET": "your-discord-client-secret",
-		"JWT_PRIVATE_KEY": "your-jwt-private-key",
-		"OIDC_CLIENT_ID": "your-oidc-client-id",
-		"OIDC_REDIRECT_URI": "http://localhost:8788/callback",
-		"STATE_SECRET": "a-very-secret-string-for-state",
-		"CODE_SECRET": "a-very-secret-string-for-code-encryption",
-		"OIDC_CLIENT_SECRET": "your-oidc-client-secret"
+		"DISCORD_CLIENT_ID": "1404871693767544893"
 	}
 	/**
 	 * Smart Placement

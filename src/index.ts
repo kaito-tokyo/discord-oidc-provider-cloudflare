@@ -3,18 +3,6 @@ import { HTTPException } from 'hono/http-exception';
 import { SignJWT, jwtVerify, EncryptJWT, jwtDecrypt, importJWK } from 'jose';
 import type { JWK } from 'jose';
 
-// Honoの型定義に環境変数の型を追加
-type Env = {
-	DISCORD_CLIENT_ID: string;
-	DISCORD_CLIENT_SECRET: string;
-	JWT_PRIVATE_KEY: string; // RSA秘密鍵のJWK形式の文字列
-	OIDC_CLIENT_ID: string;
-	OIDC_CLIENT_SECRET: string;
-	OIDC_REDIRECT_URI: string;
-	STATE_SECRET: string; // 状態JWTの署名用共通鍵
-	CODE_SECRET: string; // 認可コードJWEの暗号化用共通鍵
-};
-
 const app = new Hono<{ Bindings: Env }>();
 
 // .well-known/openid-configuration
@@ -25,7 +13,7 @@ app.get('/.well-known/openid-configuration', (c) => {
     authorization_endpoint: `${issuer}/auth`,
     token_endpoint: `${issuer}/token`,
     jwks_uri: `${issuer}/jwks.json`,
-    userinfo_endpoint: `${issuer}/userinfo`, // userinfoエンドポイントを追加
+    userinfo_endpoint: `${issuer}/userinfo`, // Add userinfo endpoint
     response_types_supported: ['code'],
     subject_types_supported: ['public'],
     id_token_signing_alg_values_supported: ['RS256'],
@@ -35,11 +23,11 @@ app.get('/.well-known/openid-configuration', (c) => {
   });
 });
 
-// /jwks.json - 公開鍵を公開するエンドポイント
+// /jwks.json - Endpoint to expose the public key
 app.get('/jwks.json', (c) => {
   try {
     const privateJwk = JSON.parse(c.env.JWT_PRIVATE_KEY) as JWK;
-    // 秘密鍵から公開鍵情報のみを抽出
+    // Extract only public key information from the private key
     const publicJwk: JWK = {
       kty: privateJwk.kty,
       n: privateJwk.n,
@@ -55,11 +43,11 @@ app.get('/jwks.json', (c) => {
   }
 });
 
-// /auth - 認可エンドポイント
+// /auth - Authorization endpoint
 app.get('/auth', async (c) => {
   const { response_type, client_id, redirect_uri, scope, state, nonce } = c.req.query();
 
-  // パラメータ検証
+  // Validate parameters
   if (response_type !== 'code') throw new HTTPException(400, { message: 'invalid response_type' });
   if (client_id !== c.env.OIDC_CLIENT_ID) throw new HTTPException(400, { message: 'invalid client_id' });
   if (redirect_uri !== c.env.OIDC_REDIRECT_URI) throw new HTTPException(400, { message: 'invalid redirect_uri' });
@@ -70,7 +58,7 @@ app.get('/auth', async (c) => {
   const discordScopes = ['identify'];
   if (scope.includes('email')) discordScopes.push('email');
 
-  // 元のリクエスト情報をJWTに詰めてstateとしてDiscordに渡す
+  // Pack the original request info into a JWT and pass it to Discord as state
   const stateJwt = await new SignJWT({
     jti: crypto.randomUUID(),
     original_state: state,
@@ -95,7 +83,7 @@ app.get('/auth', async (c) => {
   return c.redirect(discordAuthUrl.toString());
 });
 
-// /callback - Discordからのリダイレクト先
+// /callback - Redirect target from Discord
 app.get('/callback', async (c) => {
   const { code, state } = c.req.query();
   const issuer = new URL(c.req.url).origin;
@@ -103,13 +91,13 @@ app.get('/callback', async (c) => {
   if (!code) throw new HTTPException(400, { message: 'code is required' });
   if (!state) throw new HTTPException(400, { message: 'state is required' });
 
-  // state (JWT) を検証
+  // Verify the state (JWT)
   const { payload: statePayload } = await jwtVerify(state, new TextEncoder().encode(c.env.STATE_SECRET), {
     issuer: issuer,
     audience: c.env.DISCORD_CLIENT_ID,
   });
 
-  // Discordの認可コードをアクセストークンに交換
+  // Exchange the Discord authorization code for an access token
   const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -128,7 +116,7 @@ app.get('/callback', async (c) => {
   }
   const discordTokens = (await tokenResponse.json()) as { access_token: string };
 
-  // Discordのアクセストークン等をJWEに暗号化してOIDCの認可コードとする
+  // Encrypt the Discord access token etc. into a JWE to be used as the OIDC authorization code
   const oidcCode = await new EncryptJWT({
     discord_access_token: discordTokens.access_token,
     nonce: statePayload.nonce,
@@ -141,7 +129,7 @@ app.get('/callback', async (c) => {
     .setExpirationTime('5m')
     .encrypt(new TextEncoder().encode(c.env.CODE_SECRET));
 
-  // 元のクライアントにリダイレクト
+  // Redirect to the original client
   const finalRedirectUri = new URL(statePayload.redirect_uri as string);
   finalRedirectUri.searchParams.set('code', oidcCode);
   finalRedirectUri.searchParams.set('state', statePayload.original_state as string);
@@ -149,25 +137,25 @@ app.get('/callback', async (c) => {
   return c.redirect(finalRedirectUri.toString());
 });
 
-// /token - トークンエンドポイント
+// /token - Token endpoint
 app.post('/token', async (c) => {
   const issuer = new URL(c.req.url).origin;
   const body = await c.req.parseBody();
 
-  // リクエスト検証
+  // Validate request
   if (body.grant_type !== 'authorization_code') throw new HTTPException(400, { message: 'invalid grant_type' });
   if (body.client_id !== c.env.OIDC_CLIENT_ID || body.client_secret !== c.env.OIDC_CLIENT_SECRET) {
     throw new HTTPException(401, { message: 'invalid client credentials' });
   }
   if (!body.code) throw new HTTPException(400, { message: 'code is required' });
 
-  // 認可コード(JWE)を復号
+  // Decrypt the authorization code (JWE)
   const { payload: codePayload } = await jwtDecrypt(body.code as string, new TextEncoder().encode(c.env.CODE_SECRET), {
     issuer: issuer,
     audience: c.env.OIDC_CLIENT_ID,
   });
 
-  // Discordのユーザー情報を取得
+  // Fetch user information from Discord
   const userResponse = await fetch('https://discord.com/api/users/@me', {
     headers: { Authorization: `Bearer ${codePayload.discord_access_token}` },
   });
@@ -180,7 +168,7 @@ app.post('/token', async (c) => {
   const privateJwk = JSON.parse(c.env.JWT_PRIVATE_KEY) as JWK;
   const privateKey = await importJWK(privateJwk, 'RS256');
 
-  // IDトークンを生成
+  // Generate ID token
   const idToken = await new SignJWT({
     name: user.username,
     picture: `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png`,
@@ -196,9 +184,9 @@ app.post('/token', async (c) => {
     .setExpirationTime('1h')
     .sign(privateKey);
 
-  // UserInfoエンドポイント用のアクセストークンを生成
+  // Generate access token for the UserInfo endpoint
   const accessToken = await new SignJWT({
-    // userinfoで返すクレームを内包させる
+    // Include claims to be returned by userinfo
     sub: user.id,
     name: user.username,
     picture: `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png`,
@@ -209,7 +197,7 @@ app.post('/token', async (c) => {
     .setProtectedHeader({ alg: 'RS256', kid: privateJwk.kid, typ: 'JWT' })
     .setIssuedAt()
     .setIssuer(issuer)
-    .setAudience(issuer) // Audienceは自分自身(userinfoエンドポイント)
+    .setAudience(issuer) // Audience is the provider itself (the userinfo endpoint)
     .setSubject(user.id)
     .setExpirationTime('1h')
     .sign(privateKey);
@@ -223,7 +211,7 @@ app.post('/token', async (c) => {
   });
 });
 
-// /userinfo - UserInfoエンドポイント
+// /userinfo - UserInfo endpoint
 app.get('/userinfo', async (c) => {
   const authHeader = c.req.header('Authorization');
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -241,7 +229,7 @@ app.get('/userinfo', async (c) => {
       audience: issuer,
     });
 
-    // scopeに応じて返すクレームをフィルタリング
+    // Filter claims to be returned based on scope
     const claims: { [key: string]: any } = { sub: payload.sub };
     const scopes = (payload.scope as string).split(' ');
 

@@ -1,24 +1,23 @@
-import { env, createExecutionContext, waitOnExecutionContext, SELF } from 'cloudflare:test';
+import { SELF } from 'cloudflare:test';
 import { describe, it, expect } from 'vitest';
-import worker from '../src/index';
 
-// For now, you'll need to do something like this to get a correctly-typed
-// `Request` to pass to `worker.fetch()`.
-const IncomingRequest = Request<unknown, IncomingRequestCfProperties>;
-
-describe('Hello World worker', () => {
-	it('responds with Hello World! (unit style)', async () => {
-		const request = new IncomingRequest('http://example.com');
-		// Create an empty context to pass to `worker.fetch()`.
-		const ctx = createExecutionContext();
-		const response = await worker.fetch(request, env, ctx);
-		// Wait for all `Promise`s passed to `ctx.waitUntil()` to settle before running test assertions
-		await waitOnExecutionContext(ctx);
-		expect(await response.text()).toMatchInlineSnapshot(`"Hello World!"`);
-	});
-
-	it('responds with Hello World! (integration style)', async () => {
-		const response = await SELF.fetch('https://example.com');
-		expect(await response.text()).toMatchInlineSnapshot(`"Hello World!"`);
+describe('OIDC Provider', () => {
+	it('redirects to Discord for authorization', async () => {
+		const params = new URLSearchParams({
+			response_type: 'code',
+			client_id: 'test_oidc_client_id',
+			redirect_uri: 'http://localhost:8787/callback',
+			scope: 'openid profile email',
+			state: 'af0ifjsldkj',
+			nonce: 'n-0s6_W4_W4',
+		});
+		const response = await SELF.fetch(`https://example.com/auth?${params.toString()}`);
+		expect(response.status).toBe(302);
+		const location = response.headers.get('Location');
+		expect(location).not.toBeNull();
+		const locationUrl = new URL(location!);
+		expect(locationUrl.hostname).toBe('discord.com');
+		expect(locationUrl.searchParams.get('client_id')).toBe('test_discord_client_id');
+		expect(locationUrl.searchParams.get('scope')).toBe('identify email');
 	});
 });
