@@ -145,7 +145,7 @@ app.get('/callback', async (c) => {
   });
 
   if (!tokenResponse.ok) {
-    console.error('Discord token exchange failed:', await tokenResponse.json());
+    console.error('Discord token exchange failed:', await tokenResponse.text());
     throw new HTTPException(500, { message: 'Discord token exchange failed' });
   }
   const discordTokens = (await tokenResponse.json()) as { access_token: string };
