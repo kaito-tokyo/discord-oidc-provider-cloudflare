@@ -4,6 +4,16 @@ import { SignJWT, jwtVerify, EncryptJWT, jwtDecrypt, importJWK } from 'jose';
 import type { JWK } from 'jose';
 import { v7 as uuidv7 } from 'uuid';
 
+const base64urlToUint8Array = (base64url: string): Uint8Array => {
+  const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/');
+  const bin = atob(base64);
+  const uint8Array = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) {
+    uint8Array[i] = bin.charCodeAt(i);
+  }
+  return uint8Array;
+};
+
 const app = new Hono<{ Bindings: Env }>();
 
 // .well-known/openid-configuration
@@ -153,7 +163,7 @@ app.get('/callback', async (c) => {
     .setIssuer(issuer)
     .setAudience(c.env.OIDC_CLIENT_ID)
     .setExpirationTime('5m')
-    .encrypt(new TextEncoder().encode(c.env.CODE_SECRET));
+    .encrypt(base64urlToUint8Array(c.env.CODE_SECRET));
 
   // Redirect to the original client
   const finalRedirectUri = new URL(statePayload.redirect_uri as string);
