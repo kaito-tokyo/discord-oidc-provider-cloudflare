@@ -16,10 +16,11 @@ app.get('/.well-known/openid-configuration', (c) => {
     userinfo_endpoint: `${issuer}/userinfo`, // Add userinfo endpoint
     response_types_supported: ['code'],
     subject_types_supported: ['public'],
-    id_token_signing_alg_values_supported: ['RS256'],
+    id_token_signing_alg_values_supported: ['ES256'],
     scopes_supported: ['openid', 'profile', 'email'],
     token_endpoint_auth_methods_supported: ['client_secret_post'],
     claims_supported: ['sub', 'iss', 'aud', 'exp', 'iat', 'nonce', 'name', 'picture', 'email'],
+    code_challenge_methods_supported: ['S256'],
   });
 });
 
@@ -30,9 +31,10 @@ app.get('/jwks.json', (c) => {
     // Extract only public key information from the private key
     const publicJwk: JWK = {
       kty: privateJwk.kty,
-      n: privateJwk.n,
-      e: privateJwk.e,
-      alg: 'RS256',
+      crv: privateJwk.crv,
+      x: privateJwk.x,
+      y: privateJwk.y,
+      alg: 'ES256',
       kid: privateJwk.kid,
       use: 'sig',
     };
@@ -45,7 +47,8 @@ app.get('/jwks.json', (c) => {
 
 // /auth - Authorization endpoint
 app.get('/auth', async (c) => {
-  const { response_type, client_id, redirect_uri, scope, state, nonce } = c.req.query();
+  const { response_type, client_id, redirect_uri, scope, state, nonce, code_challenge, code_challenge_method } =
+    c.req.query();
 
   // Validate parameters
   if (response_type !== 'code') throw new HTTPException(400, { message: 'invalid response_type' });
@@ -54,6 +57,10 @@ app.get('/auth', async (c) => {
   if (!scope?.includes('openid')) throw new HTTPException(400, { message: 'invalid scope' });
   if (!state) throw new HTTPException(400, { message: 'state is required' });
   if (!nonce) throw new HTTPException(400, { message: 'nonce is required' });
+  if (!code_challenge) throw new HTTPException(400, { message: 'code_challenge is required' });
+  if (code_challenge_method && code_challenge_method !== 'S256') {
+    throw new HTTPException(400, { message: 'code_challenge_method is not supported' });
+  }
 
   const discordScopes = ['identify'];
   if (scope.includes('email')) discordScopes.push('email');
@@ -65,6 +72,8 @@ app.get('/auth', async (c) => {
     redirect_uri: redirect_uri,
     nonce: nonce,
     scope: scope,
+    code_challenge: code_challenge,
+    code_challenge_method: code_challenge_method || 'S256',
   })
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
@@ -121,6 +130,8 @@ app.get('/callback', async (c) => {
     discord_access_token: discordTokens.access_token,
     nonce: statePayload.nonce,
     scope: statePayload.scope,
+    code_challenge: statePayload.code_challenge,
+    code_challenge_method: statePayload.code_challenge_method,
   })
     .setProtectedHeader({ alg: 'dir', enc: 'A256GCM' })
     .setIssuedAt()
@@ -155,6 +166,18 @@ app.post('/token', async (c) => {
     audience: c.env.OIDC_CLIENT_ID,
   });
 
+  // PKCE verification
+  const code_verifier = body.code_verifier as string;
+  if (!code_verifier) throw new HTTPException(400, { message: 'code_verifier is required' });
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(code_verifier));
+  const challenge = btoa(String.fromCharCode(...new Uint8Array(digest)))
+    .replace(/=/g, '')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_');
+  if (challenge !== codePayload.code_challenge) {
+    throw new HTTPException(401, { message: 'invalid code_verifier' });
+  }
+
   // Fetch user information from Discord
   const userResponse = await fetch('https://discord.com/api/users/@me', {
     headers: { Authorization: `Bearer ${codePayload.discord_access_token}` },
@@ -166,7 +189,7 @@ app.post('/token', async (c) => {
   const user = (await userResponse.json()) as { id: string; username: string; avatar: string; email?: string; verified?: boolean };
 
   const privateJwk = JSON.parse(c.env.JWT_PRIVATE_KEY) as JWK;
-  const privateKey = await importJWK(privateJwk, 'RS256');
+  const privateKey = await importJWK(privateJwk, 'ES256');
 
   // Generate ID token
   const idToken = await new SignJWT({
@@ -176,7 +199,7 @@ app.post('/token', async (c) => {
     email_verified: user.verified,
     nonce: codePayload.nonce as string,
   })
-    .setProtectedHeader({ alg: 'RS256', kid: privateJwk.kid, typ: 'JWT' })
+    .setProtectedHeader({ alg: 'ES256', kid: privateJwk.kid, typ: 'JWT' })
     .setIssuedAt()
     .setIssuer(issuer)
     .setAudience(c.env.OIDC_CLIENT_ID)
@@ -194,7 +217,7 @@ app.post('/token', async (c) => {
     email_verified: user.verified,
     scope: codePayload.scope,
   })
-    .setProtectedHeader({ alg: 'RS256', kid: privateJwk.kid, typ: 'JWT' })
+    .setProtectedHeader({ alg: 'ES256', kid: privateJwk.kid, typ: 'JWT' })
     .setIssuedAt()
     .setIssuer(issuer)
     .setAudience(issuer) // Audience is the provider itself (the userinfo endpoint)
@@ -221,7 +244,7 @@ app.get('/userinfo', async (c) => {
   const issuer = new URL(c.req.url).origin;
 
   const privateJwk = JSON.parse(c.env.JWT_PRIVATE_KEY) as JWK;
-  const publicKey = await importJWK({ ...privateJwk, d: undefined }, 'RS256');
+  const publicKey = await importJWK({ ...privateJwk, d: undefined }, 'ES256');
 
   try {
     const { payload } = await jwtVerify(token, publicKey, {
