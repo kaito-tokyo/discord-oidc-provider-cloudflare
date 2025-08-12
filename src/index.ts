@@ -191,6 +191,7 @@ app.post('/token', async (c) => {
 
   // Validate client_id
   if (body.client_id !== c.env.OIDC_CLIENT_ID) {
+		console.log('Invalid client_id:', body.client_id);
     return c.json<TokenErrorResponse>({ error: 'invalid_client', error_description: 'invalid client_id' }, 401);
   }
 
@@ -202,6 +203,7 @@ app.post('/token', async (c) => {
   const isPkceFlowRequest = !!body.code_verifier;
 
 	if (!isPkceFlowRequest && body.client_secret !== c.env.OIDC_CLIENT_SECRET) {
+		console.log('Invalid client_secret:', body.client_secret);
     return c.json<TokenErrorResponse>({ error: 'invalid_client', error_description: 'client_secret is required or invalid' }, 401);
 	}
 
