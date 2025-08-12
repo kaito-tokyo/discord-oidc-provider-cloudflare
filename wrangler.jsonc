@@ -4,7 +4,7 @@
  */
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "kaito-tokyo-discord-oidc-provider-cloudflare",
+	"name": "kaito-tokyo-discord-oidc",
 	"main": "src/index.ts",
 	"compatibility_date": "2025-08-03",
 	"observability": {

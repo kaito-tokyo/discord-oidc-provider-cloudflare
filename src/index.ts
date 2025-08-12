@@ -72,7 +72,6 @@ app.get('/auth', async (c) => {
   if (client_id !== c.env.OIDC_CLIENT_ID) return redirectToError('unauthorized_client', 'invalid client_id');
   if (!scope?.includes('openid')) return redirectToError('invalid_scope', 'invalid scope');
   if (!state) return redirectToError('invalid_request', 'state is required');
-  if (!nonce) return redirectToError('invalid_request', 'nonce is required');
   if (!code_challenge) return redirectToError('invalid_request', 'code_challenge is required');
   if (code_challenge_method && code_challenge_method !== 'S256') {
     return redirectToError('invalid_request', 'code_challenge_method is not supported');
