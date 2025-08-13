@@ -1,32 +1,32 @@
-name: "Push"
+name: 'Push'
 
 on:
   push:
     branches:
-      - "main"
+      - 'main'
   pull_request:
     branches:
-      - "main"
+      - 'main'
 
 permissions:
-  contents: "read"
+  contents: 'read'
 
 concurrency:
-  group: "${{ github.workflow }}-${{ github.ref }}"
+  group: '${{ github.workflow }}-${{ github.ref }}'
   cancel-in-progress: "${{ github.ref != 'refs/heads/main' }}"
 
 jobs:
   PushPrettier:
-    uses: "./.github/workflows/push-prettier.yaml"
+    uses: './.github/workflows/push-prettier.yaml'
     permissions:
-      contents: "read"
+      contents: 'read'
 
   PushTest:
-    uses: "./.github/workflows/push-test.yaml"
+    uses: './.github/workflows/push-test.yaml'
     permissions:
-      contents: "read"
+      contents: 'read'
 
   PushWranglerBuild:
-    uses: "./.github/workflows/push-wrangler-build.yaml"
+    uses: './.github/workflows/push-wrangler-build.yaml'
     permissions:
-      contents: "read"
+      contents: 'read'
