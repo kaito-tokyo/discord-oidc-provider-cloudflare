@@ -95,6 +95,10 @@ app.get('/auth', async (c) => {
 
   const discordScopes = ['identify'];
   if (scope.includes('email')) discordScopes.push('email');
+  // Add the new scope for reading guild members
+  if (c.env.DISCORD_GUILD_ID) { // Only request if guild ID is configured
+    discordScopes.push('guilds.members.read');
+  }
 
   // Pack the original request info into a JWT and pass it to Discord as state
   const stateJwt = await new SignJWT({
@@ -253,6 +257,20 @@ app.post('/token', async (c) => {
   }
   const user = (await userResponse.json()) as { id: string; username: string; avatar: string; email?: string; verified?: boolean };
 
+  let userRoles: string[] = [];
+  if (c.env.DISCORD_GUILD_ID) {
+    const guildMemberResponse = await fetch(`https://discord.com/api/users/@me/guilds/${c.env.DISCORD_GUILD_ID}/member`, {
+      headers: { Authorization: `Bearer ${codePayload.discord_access_token}` },
+    });
+
+    if (guildMemberResponse.ok) {
+      const guildMember = await guildMemberResponse.json() as { roles: string[] };
+      userRoles = guildMember.roles;
+    } else {
+      console.warn(`Failed to fetch guild member roles for guild ${c.env.DISCORD_GUILD_ID}:`, await guildMemberResponse.text());
+    }
+  }
+
   const privateJwk = JSON.parse(c.env.JWT_PRIVATE_KEY) as JWK;
   const privateKey = await importJWK(privateJwk, 'ES256');
 
@@ -263,6 +281,7 @@ app.post('/token', async (c) => {
     email: user.email,
     email_verified: user.verified,
     nonce: codePayload.nonce as string,
+    roles: userRoles, // Add roles claim here
   })
     .setProtectedHeader({ alg: 'ES256', kid: privateJwk.kid, typ: 'JWT' })
     .setIssuedAt()
