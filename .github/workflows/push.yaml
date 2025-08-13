@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   PushWranglerBuild:
-    uses: ".github/workflows/push-wrangler-build.yaml"
+    uses: "./.github/workflows/push-wrangler-build.yaml"
 
   PushTest:
-    uses: ".github/workflows/push-test.yaml"
+    uses: "./.github/workflows/push-test.yaml"
