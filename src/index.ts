@@ -38,8 +38,6 @@ app.get('/.well-known/openid-configuration', (c) => {
 		token_endpoint_auth_methods_supported: ['client_secret_post'],
 		claims_supported: ['sub', 'iss', 'aud', 'exp', 'iat', 'nonce', 'name', 'picture', 'email'],
 		code_challenge_methods_supported: ['S256'],
-		authorization_encryption_alg_values_supported: ['ECDH-ES'],
-		authorization_encryption_enc_values_supported: ['A256GCM'],
 	});
 });
 
@@ -163,7 +161,15 @@ app.get('/callback', async (c) => {
 	const discordTokens = (await tokenResponse.json()) as { access_token: string };
 
 	// Encrypt the Discord access token etc. into a JWE to be used as the OIDC authorization code
-	const codePrivateKey = await importJWK(JSON.parse(c.env.CODE_PRIVATE_KEY) as JWK);
+	const codePrivateJsonKey = JSON.parse(c.env.CODE_PRIVATE_KEY) as JWK;
+	const codePublicKey = await importJWK({
+		alg: codePrivateJsonKey.alg,
+		kty: codePrivateJsonKey.kty,
+		crv: codePrivateJsonKey.crv,
+		x: codePrivateJsonKey.x,
+		y: codePrivateJsonKey.y,
+	} satisfies JWK);
+
 	const oidcCode = await new EncryptJWT({
 		discord_access_token: discordTokens.access_token,
 		nonce: statePayload.nonce,
@@ -176,7 +182,7 @@ app.get('/callback', async (c) => {
 		.setIssuer(issuer)
 		.setAudience(c.env.OIDC_CLIENT_ID)
 		.setExpirationTime('5m')
-		.encrypt(codePrivateKey);
+		.encrypt(codePublicKey);
 
 	// Redirect to the original client
 	const finalRedirectUri = new URL(statePayload.redirect_uri as string);

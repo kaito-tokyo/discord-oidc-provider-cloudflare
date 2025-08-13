@@ -1,6 +1,6 @@
 import { SELF } from 'cloudflare:test';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { SignJWT, jwtDecrypt, EncryptJWT } from 'jose';
+import { SignJWT, jwtDecrypt, EncryptJWT, importJWK } from 'jose';
 import { TextEncoder } from 'util';
 
 // Helper to convert base64url to Uint8Array
@@ -20,7 +20,7 @@ describe('/callback endpoint', () => {
 	const MOCK_DISCORD_CLIENT_SECRET = 'discord-client-secret';
 	const MOCK_OIDC_CLIENT_ID = 'oidc-client-id';
 	const MOCK_OIDC_REDIRECT_URI = 'http://localhost/redirect';
-	const MOCK_CODE_SECRET = 'orqOuV+sLB0mH0/EM58AC7pOS13buKMYAt/qSIgH2h8=';
+	const MOCK_CODE_PRIVATE_KEY = "{\"kty\":\"EC\",\"x\":\"BNo3Mq2cH_F3gjVMNarajk6CEe7ACnog1AYEnUO0N8g\",\"y\":\"PsSNgkm5Jpy8p8rc8HH0U9fa4-dCEJG81kxI2yQArH8\",\"crv\":\"P-256\",\"d\":\"y2y53r0Z9e2OorJwFDlezhLBNv7qekxDOft2dzbFTRo\",\"use\":\"enc\",\"alg\":\"ECDH-ES+A256KW\",\"kid\":\"0198a59b-82af-765a-b25b-3e378297a2a0\"}"
 
 	beforeEach(() => {
 		// Mock the global fetch function
@@ -72,8 +72,10 @@ describe('/callback endpoint', () => {
 		const oidcCode = redirectUrl.searchParams.get('code');
 		expect(oidcCode).toBeDefined();
 
+		const codePrivateKey = await importJWK(JSON.parse(MOCK_CODE_PRIVATE_KEY));
+
 		// Verify the OIDC code (JWE)
-		const { payload: oidcCodePayload } = await jwtDecrypt(oidcCode!, base64urlToUint8Array(MOCK_CODE_SECRET), {
+		const { payload: oidcCodePayload } = await jwtDecrypt(oidcCode!, codePrivateKey, {
 			issuer: 'http://localhost',
 			audience: MOCK_OIDC_CLIENT_ID,
 		});
