@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   PushPrettier:
-    uses: "./.github/workflows/prettier.yaml"
+    uses: "./.github/workflows/push-prettier.yaml"
     permissions:
       contents: "read"
 
