@@ -299,42 +299,4 @@ app.post('/token', async (c) => {
   });
 });
 
-// /userinfo - UserInfo endpoint
-app.get('/userinfo', async (c) => {
-  const authHeader = c.req.header('Authorization');
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    throw new HTTPException(401, { message: 'Missing or invalid Authorization header' });
-  }
-  const token = authHeader.substring(7);
-  const issuer = new URL(c.req.url).origin;
-
-  const privateJwk = JSON.parse(c.env.JWT_PRIVATE_KEY) as JWK;
-  const publicKey = await importJWK({ ...privateJwk, d: undefined }, 'ES256');
-
-  try {
-    const { payload } = await jwtVerify(token, publicKey, {
-      issuer: issuer,
-      audience: issuer,
-    });
-
-    // Filter claims to be returned based on scope
-    const claims: { [key: string]: any } = { sub: payload.sub };
-    const scopes = (payload.scope as string).split(' ');
-
-    if (scopes.includes('profile')) {
-      claims.name = payload.name;
-      claims.picture = payload.picture;
-    }
-    if (scopes.includes('email')) {
-      claims.email = payload.email;
-      claims.email_verified = payload.email_verified;
-    }
-
-    return c.json(claims);
-  } catch (err) {
-    console.error('userinfo token verification failed', err);
-    throw new HTTPException(401, { message: 'Invalid token' });
-  }
-});
-
 export default app;
