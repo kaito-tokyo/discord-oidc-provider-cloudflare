@@ -26,7 +26,7 @@
 				"OIDC_CLIENT_ID": "oidc-client-id",
 				"OIDC_CLIENT_SECRET": "uofmVIBq6YLoysekLqxqmfoe34tf7IYrYVsKGbtIfnQ=",
 				"OIDC_REDIRECT_URI": "http://localhost/callback",
-				"CODE_SECRET": "orqOuV+sLB0mH0/EM58AC7pOS13buKMYAt/qSIgH2h8=",
+				"CODE_PRIVATE_KEY": "{\"kty\":\"EC\",\"x\":\"9D6MFCSgXVLAAkorUnlGitGTxLsuhx-77fzUccLpmMg\",\"y\":\"YMRIvVNEdK0FeAZgM_X_NwrBUerRYpBdk9-mjhbbg7Q\",\"crv\":\"P-256\",\"d\":\"e8_kzg0kFosmoSPAn3BDp0_DCiOo9WoDkjqHXiNeBeQ\"}",
 				"DISCORD_CLIENT_SECRET": "discord-client-secret",
 				"JWT_PRIVATE_KEY": "{\"kty\":\"EC\",\"crv\":\"P-256\",\"x\":\"f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU\",\"y\":\"x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0\",\"d\":\"jpsQnnGQmL-YBIffH1136cspYG6-0iY7X1fCE9-E9LI\",\"kid\":\"1\"}",
 				"STATE_SECRET": "q9DpQgBtc4yoUFYtZgHDXfJNhxfgbRc3qJttmqyLjWI=",
