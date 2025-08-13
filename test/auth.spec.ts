@@ -25,7 +25,7 @@ describe('/auth', () => {
 		expect(redirectUrl.searchParams.get('client_id')).toBe(DISCORD_CLIENT_ID);
 		expect(redirectUrl.searchParams.get('redirect_uri')).toBe('http://localhost/callback');
 		expect(redirectUrl.searchParams.get('response_type')).toBe('code');
-		expect(redirectUrl.searchParams.get('scope')).toBe('identify'); // Default scope
+		expect(redirectUrl.searchParams.get('scope')).toBe('identify guilds.members.read');
 		expect(redirectUrl.searchParams.get('state')).toBeDefined();
 	});
 
@@ -43,7 +43,7 @@ describe('/auth', () => {
 		const response = await SELF.fetch(`http://localhost/auth?${params.toString()}`, { redirect: 'manual' });
 		expect(response.status).toBe(302);
 		const redirectUrl = new URL(response.headers.get('location')!);
-		expect(redirectUrl.searchParams.get('scope')).toBe('identify email');
+		expect(redirectUrl.searchParams.get('scope')).toBe('identify email guilds.members.read');
 	});
 
 	it('should return 400 for invalid response_type', async () => {
