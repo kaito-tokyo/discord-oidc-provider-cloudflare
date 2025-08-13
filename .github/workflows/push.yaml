@@ -16,8 +16,17 @@ concurrency:
   cancel-in-progress: "${{ github.ref != 'refs/heads/main' }}"
 
 jobs:
-  PushWranglerBuild:
-    uses: "./.github/workflows/push-wrangler-build.yaml"
+  PushPrettier:
+    uses: "./.github/workflows/prettier.yaml"
+    permissions:
+      contents: "read"
 
   PushTest:
     uses: "./.github/workflows/push-test.yaml"
+    permissions:
+      contents: "read"
+
+  PushWranglerBuild:
+    uses: "./.github/workflows/push-wrangler-build.yaml"
+    permissions:
+      contents: "read"
