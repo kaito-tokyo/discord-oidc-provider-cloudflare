@@ -290,6 +290,7 @@ describe('/token endpoint', () => {
 	});
 
 	it('should return 500 if Discord user info fetch fails', async () => {
+		const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 		// Temporarily override fetch to simulate a failed Discord user info fetch
 		global.fetch = vi.fn(() => Promise.resolve(new Response('{}', { status: 400 }))) as any;
 
@@ -331,5 +332,6 @@ describe('/token endpoint', () => {
 
 		expect(response.status).toBe(500);
 		expect(await response.json()).toEqual({ error: 'server_error', error_description: 'Failed to fetch user from Discord' });
+		consoleErrorSpy.mockRestore();
 	});
 });

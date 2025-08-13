@@ -104,13 +104,16 @@ describe('/callback endpoint', () => {
 	});
 
 	it('should return 500 if state JWT verification fails', async () => {
+		const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 		const discordAuthCode = 'mock_discord_auth_code';
 		const invalidStateJwt = 'invalid.jwt.signature'; // An invalid JWT
 		const response = await SELF.fetch(`http://localhost/callback?code=${discordAuthCode}&state=${invalidStateJwt}`, { redirect: 'manual' });
 		expect(response.status).toBe(500); // Hono's HTTPException for JWT verification failure
+		consoleErrorSpy.mockRestore();
 	});
 
 	it('should return 500 if Discord token exchange fails', async () => {
+		const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 		// Temporarily override fetch to simulate a failed Discord token exchange
 		global.fetch = vi.fn(() => Promise.resolve(new Response('{}', { status: 400 }))) as any;
 
@@ -142,5 +145,6 @@ describe('/callback endpoint', () => {
 		expect(response.status).toBe(500);
 		const body = await response.text();
 		expect(body).toBe('Discord token exchange failed');
+		consoleErrorSpy.mockRestore();
 	});
 });
