@@ -8,31 +8,31 @@
 	"main": "src/index.ts",
 	"compatibility_date": "2025-08-03",
 	"observability": {
-		"enabled": true
+		"enabled": true,
 	},
 	"env": {
 		"production": {
-            "vars": {
+			"vars": {
 				"DISCORD_CLIENT_ID": "1404871693767544893",
 				"DISCORD_GUILD_ID": "876131915424489472",
 				"OIDC_CLIENT_ID": "cloudflare-zero-trust",
-				"OIDC_REDIRECT_URI": "https://kaito-tokyo.cloudflareaccess.com/cdn-cgi/access/callback"
-			}
+				"OIDC_REDIRECT_URI": "https://kaito-tokyo.cloudflareaccess.com/cdn-cgi/access/callback",
+			},
 		},
 		"test": {
-            "vars": {
-                "DISCORD_CLIENT_ID": "discord-client-id",
+			"vars": {
+				"DISCORD_CLIENT_ID": "discord-client-id",
 				"DISCORD_GUILD_ID": "discord-guild-id",
-                "OIDC_CLIENT_ID": "oidc-client-id",
-                "OIDC_CLIENT_SECRET": "uofmVIBq6YLoysekLqxqmfoe34tf7IYrYVsKGbtIfnQ=",
-                "OIDC_REDIRECT_URI": "http://localhost/callback",
-                "CODE_SECRET": "orqOuV+sLB0mH0/EM58AC7pOS13buKMYAt/qSIgH2h8=",
+				"OIDC_CLIENT_ID": "oidc-client-id",
+				"OIDC_CLIENT_SECRET": "uofmVIBq6YLoysekLqxqmfoe34tf7IYrYVsKGbtIfnQ=",
+				"OIDC_REDIRECT_URI": "http://localhost/callback",
+				"CODE_SECRET": "orqOuV+sLB0mH0/EM58AC7pOS13buKMYAt/qSIgH2h8=",
 				"DISCORD_CLIENT_SECRET": "discord-client-secret",
-                "JWT_PRIVATE_KEY": "{\"kty\":\"EC\",\"crv\":\"P-256\",\"x\":\"f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU\",\"y\":\"x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0\",\"d\":\"jpsQnnGQmL-YBIffH1136cspYG6-0iY7X1fCE9-E9LI\",\"kid\":\"1\"}",
-                "STATE_SECRET": "q9DpQgBtc4yoUFYtZgHDXfJNhxfgbRc3qJttmqyLjWI=",
-            }
-        }
-	}
+				"JWT_PRIVATE_KEY": "{\"kty\":\"EC\",\"crv\":\"P-256\",\"x\":\"f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU\",\"y\":\"x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0\",\"d\":\"jpsQnnGQmL-YBIffH1136cspYG6-0iY7X1fCE9-E9LI\",\"kid\":\"1\"}",
+				"STATE_SECRET": "q9DpQgBtc4yoUFYtZgHDXfJNhxfgbRc3qJttmqyLjWI=",
+			},
+		},
+	},
 	/**
 	 * Smart Placement
 	 * Docs: https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement
