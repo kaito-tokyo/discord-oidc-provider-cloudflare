@@ -161,6 +161,15 @@ app.get('/callback', async (c) => {
 	const discordTokens = (await tokenResponse.json()) as { access_token: string };
 
 	// Encrypt the Discord access token etc. into a JWE to be used as the OIDC authorization code
+	const codePrivateJsonKey = JSON.parse(c.env.CODE_PRIVATE_KEY) as JWK;
+	const codePublicKey = await importJWK({
+		alg: codePrivateJsonKey.alg,
+		kty: codePrivateJsonKey.kty,
+		crv: codePrivateJsonKey.crv,
+		x: codePrivateJsonKey.x,
+		y: codePrivateJsonKey.y,
+	} satisfies JWK);
+
 	const oidcCode = await new EncryptJWT({
 		discord_access_token: discordTokens.access_token,
 		nonce: statePayload.nonce,
@@ -168,12 +177,12 @@ app.get('/callback', async (c) => {
 		code_challenge: statePayload.code_challenge,
 		code_challenge_method: statePayload.code_challenge_method,
 	})
-		.setProtectedHeader({ alg: 'dir', enc: 'A256GCM' })
+		.setProtectedHeader({ alg: 'ECDH-ES', enc: 'A256GCM' })
 		.setIssuedAt()
 		.setIssuer(issuer)
 		.setAudience(c.env.OIDC_CLIENT_ID)
 		.setExpirationTime('5m')
-		.encrypt(base64urlToUint8Array(c.env.CODE_SECRET));
+		.encrypt(codePublicKey);
 
 	// Redirect to the original client
 	const finalRedirectUri = new URL(statePayload.redirect_uri as string);
@@ -193,26 +202,16 @@ app.post('/token', async (c) => {
 		return c.json<TokenErrorResponse>({ error: 'unsupported_grant_type', error_description: 'invalid grant_type' }, 400);
 	}
 
-	const isPkceFlowRequest = !!body.code_verifier;
-
-	// Validate client_id
-	if (!isPkceFlowRequest && body.client_id !== c.env.OIDC_CLIENT_ID) {
-		return c.json<TokenErrorResponse>({ error: 'invalid_client', error_description: 'invalid client_id' }, 401);
-	}
-
 	// Validate code
 	if (!body.code) {
 		return c.json<TokenErrorResponse>({ error: 'invalid_request', error_description: 'code is required' }, 400);
 	}
 
-	if (!isPkceFlowRequest && body.client_secret !== c.env.OIDC_CLIENT_SECRET) {
-		return c.json<TokenErrorResponse>({ error: 'invalid_client', error_description: 'client_secret is required or invalid' }, 401);
-	}
-
 	// Decrypt the authorization code (JWE) early to get codePayload
 	let codePayload;
 	try {
-		const { payload } = await jwtDecrypt(body.code as string, base64urlToUint8Array(c.env.CODE_SECRET), {
+		const codePrivateKey = await importJWK(JSON.parse(c.env.CODE_PRIVATE_KEY) as JWK);
+		const { payload } = await jwtDecrypt(body.code as string, codePrivateKey, {
 			issuer: issuer,
 			audience: c.env.OIDC_CLIENT_ID,
 		});
@@ -226,7 +225,7 @@ app.post('/token', async (c) => {
 	// Handle PKCE vs. non-PKCE flows
 	if (isPkceFlowCode) {
 		// The authorization code was issued for a PKCE flow
-		if (!isPkceFlowRequest) {
+		if (!body.code_verifier) {
 			// But the token request is missing code_verifier
 			return c.json<TokenErrorResponse>({ error: 'invalid_request', error_description: 'code_verifier is required for PKCE flow' }, 400);
 		}
@@ -242,13 +241,22 @@ app.post('/token', async (c) => {
 		}
 	} else {
 		// The authorization code was issued for a non-PKCE flow
-		if (isPkceFlowRequest) {
+		if (body.code_verifier) {
 			// But the token request includes code_verifier
 			return c.json<TokenErrorResponse>(
 				{ error: 'invalid_request', error_description: 'PKCE code_verifier not expected for non-PKCE flow' },
 				400,
 			);
 		}
+		// For non-PKCE flow, validate client_secret
+		if (body.client_secret !== c.env.OIDC_CLIENT_SECRET) {
+			return c.json<TokenErrorResponse>({ error: 'invalid_client', error_description: 'client_secret is required or invalid' }, 401);
+		}
+	}
+
+	// Validate client_id
+	if (body.client_id !== c.env.OIDC_CLIENT_ID) {
+		return c.json<TokenErrorResponse>({ error: 'invalid_client', error_description: 'invalid client_id' }, 401);
 	}
 
 	// Fetch user information from Discord

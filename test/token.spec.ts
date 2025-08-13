@@ -25,10 +25,10 @@ const generateCodeChallenge = async (codeVerifier: string): Promise<string> => {
 
 describe('/token endpoint', () => {
 	const MOCK_OIDC_CLIENT_ID = 'oidc-client-id';
-	const MOCK_OIDC_CLIENT_SECRET = 'oidc-client-secret';
-	const MOCK_CODE_SECRET = 'orqOuV+sLB0mH0/EM58AC7pOS13buKMYAt/qSIgH2h8=';
+	const MOCK_CODE_PRIVATE_KEY =
+		'{"kty":"EC","x":"BNo3Mq2cH_F3gjVMNarajk6CEe7ACnog1AYEnUO0N8g","y":"PsSNgkm5Jpy8p8rc8HH0U9fa4-dCEJG81kxI2yQArH8","crv":"P-256","d":"y2y53r0Z9e2OorJwFDlezhLBNv7qekxDOft2dzbFTRo","use":"enc","alg":"ECDH-ES+A256KW","kid":"0198a59b-82af-765a-b25b-3e378297a2a0"}';
 	const MOCK_JWT_PRIVATE_KEY =
-		'{"kty":"EC","crv":"P-256","x":"f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU","y":"x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0","d":"jpsQnnGQmL-YBIffH1136cspYG6-0iY7X1fCE9-E9LI","kid":"1"}';
+		'{"kty":"EC","x":"Vb5MIA7WsDQzqjsV8udvwNIvhZ7HWZxzyAstzCyR5xk","y":"8Lc4Y0Ke0wBH9T7v6179zjaCeCaiDNRK2OtUA_YVbn8","crv":"P-256","d":"teLx5xvxFjeXua4rfvaxegX2andBE2F8Ysa8qLNf8Bo","use":"sig","alg":"ES256","kid":"0198a5b0-a018-7756-a4e3-ebf3f0dd9cfe"}';
 
 	beforeEach(() => {
 		// Mock the global fetch function for Discord API calls
@@ -59,6 +59,8 @@ describe('/token endpoint', () => {
 		const codeChallenge = await generateCodeChallenge(codeVerifier);
 
 		// Create a mock OIDC authorization code (JWE)
+		const codePrivateKey = JSON.parse(MOCK_CODE_PRIVATE_KEY);
+		const codePublicKey = await importJWK({ ...codePrivateKey, d: undefined });
 		const oidcCode = await new EncryptJWT({
 			discord_access_token: discordAccessToken,
 			nonce: nonce,
@@ -66,12 +68,12 @@ describe('/token endpoint', () => {
 			code_challenge: codeChallenge,
 			code_challenge_method: 'S256',
 		})
-			.setProtectedHeader({ alg: 'dir', enc: 'A256GCM' })
+			.setProtectedHeader({ alg: 'ECDH-ES', enc: 'A256GCM' })
 			.setIssuedAt()
 			.setIssuer('http://localhost')
 			.setAudience(MOCK_OIDC_CLIENT_ID)
 			.setExpirationTime('5m')
-			.encrypt(base64urlToUint8Array(MOCK_CODE_SECRET));
+			.encrypt(codePublicKey);
 
 		const formData = new URLSearchParams({
 			grant_type: 'authorization_code',
@@ -131,7 +133,7 @@ describe('/token endpoint', () => {
 		expect(await response.json()).toEqual({ error: 'unsupported_grant_type', error_description: 'invalid grant_type' });
 	});
 
-	it('should return 401 for invalid client_id', async () => {
+	it('should return 400 for invalid client_id', async () => {
 		const formData = new URLSearchParams({
 			grant_type: 'authorization_code',
 			client_id: 'wrong_client_id',
@@ -145,16 +147,35 @@ describe('/token endpoint', () => {
 			body: formData.toString(),
 		});
 
-		expect(response.status).toBe(401);
-		expect(await response.json()).toEqual({ error: 'invalid_client', error_description: 'invalid client_id' });
+		expect(response.status).toBe(400);
+		expect(await response.json()).toEqual({ error: 'invalid_grant', error_description: 'invalid authorization code' });
 	});
 
 	it('should return 401 for invalid client_secret when PKCE is not used', async () => {
+		const discordAccessToken = 'mock_discord_access_token';
+		const nonce = 'test_nonce';
+		const scope = 'openid profile email';
+
+		// Create a mock OIDC authorization code (JWE) without a code_challenge
+		const codePrivateKey = JSON.parse(MOCK_CODE_PRIVATE_KEY);
+		const codePublicKey = await importJWK({ ...codePrivateKey, d: undefined });
+		const oidcCode = await new EncryptJWT({
+			discord_access_token: discordAccessToken,
+			nonce: nonce,
+			scope: scope,
+		})
+			.setProtectedHeader({ alg: 'ECDH-ES', enc: 'A256GCM' })
+			.setIssuedAt()
+			.setIssuer('http://localhost')
+			.setAudience(MOCK_OIDC_CLIENT_ID)
+			.setExpirationTime('5m')
+			.encrypt(codePublicKey);
+
 		const formData = new URLSearchParams({
 			grant_type: 'authorization_code',
 			client_id: MOCK_OIDC_CLIENT_ID,
 			client_secret: 'wrong_secret',
-			code: 'some_code',
+			code: oidcCode,
 		});
 
 		const response = await SELF.fetch('http://localhost/token', {
@@ -191,6 +212,8 @@ describe('/token endpoint', () => {
 		const codeChallenge = 'some_challenge'; // This will be ignored if code_verifier is missing
 
 		// Create a mock OIDC authorization code (JWE)
+		const codePrivateKey = JSON.parse(MOCK_CODE_PRIVATE_KEY);
+		const codePublicKey = await importJWK({ ...codePrivateKey, d: undefined });
 		const oidcCode = await new EncryptJWT({
 			discord_access_token: discordAccessToken,
 			nonce: nonce,
@@ -198,12 +221,12 @@ describe('/token endpoint', () => {
 			code_challenge: codeChallenge,
 			code_challenge_method: 'S256',
 		})
-			.setProtectedHeader({ alg: 'dir', enc: 'A256GCM' })
+			.setProtectedHeader({ alg: 'ECDH-ES', enc: 'A256GCM' })
 			.setIssuedAt()
 			.setIssuer('http://localhost')
 			.setAudience(MOCK_OIDC_CLIENT_ID)
 			.setExpirationTime('5m')
-			.encrypt(base64urlToUint8Array(MOCK_CODE_SECRET));
+			.encrypt(codePublicKey);
 
 		const formData = new URLSearchParams({
 			grant_type: 'authorization_code',
@@ -218,17 +241,22 @@ describe('/token endpoint', () => {
 			body: formData.toString(),
 		});
 
-		expect(response.status).toBe(401);
-		expect(await response.json()).toEqual({ error: 'invalid_client', error_description: 'client_secret is required or invalid' });
+		expect(response.status).toBe(400);
+		expect(await response.json()).toEqual({
+			error: 'invalid_request',
+			error_description: 'code_verifier is required for PKCE flow',
+		});
 	});
 
-	it('should return 401 for invalid code_verifier', async () => {
+	it('should return 400 for invalid code_verifier', async () => {
 		const discordAccessToken = 'mock_discord_access_token';
 		const nonce = 'test_nonce';
 		const scope = 'openid profile email';
 		const codeChallenge = await generateCodeChallenge('correct_code_verifier');
 
 		// Create a mock OIDC authorization code (JWE) with a valid code_challenge
+		const codePrivateKey = JSON.parse(MOCK_CODE_PRIVATE_KEY);
+		const codePublicKey = await importJWK({ ...codePrivateKey, d: undefined });
 		const oidcCode = await new EncryptJWT({
 			discord_access_token: discordAccessToken,
 			nonce: nonce,
@@ -236,12 +264,12 @@ describe('/token endpoint', () => {
 			code_challenge: codeChallenge,
 			code_challenge_method: 'S256',
 		})
-			.setProtectedHeader({ alg: 'dir', enc: 'A256GCM' })
+			.setProtectedHeader({ alg: 'ECDH-ES', enc: 'A256GCM' })
 			.setIssuedAt()
 			.setIssuer('http://localhost')
 			.setAudience(MOCK_OIDC_CLIENT_ID)
 			.setExpirationTime('5m')
-			.encrypt(base64urlToUint8Array(MOCK_CODE_SECRET));
+			.encrypt(codePublicKey);
 
 		const formData = new URLSearchParams({
 			grant_type: 'authorization_code',
@@ -261,6 +289,7 @@ describe('/token endpoint', () => {
 	});
 
 	it('should return 500 if Discord user info fetch fails', async () => {
+		const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 		// Temporarily override fetch to simulate a failed Discord user info fetch
 		global.fetch = vi.fn(() => Promise.resolve(new Response('{}', { status: 400 }))) as any;
 
@@ -271,6 +300,8 @@ describe('/token endpoint', () => {
 		const codeChallenge = await generateCodeChallenge(codeVerifier);
 
 		// Create a mock OIDC authorization code (JWE)
+		const codePrivateKey = JSON.parse(MOCK_CODE_PRIVATE_KEY);
+		const codePublicKey = await importJWK({ ...codePrivateKey, d: undefined });
 		const oidcCode = await new EncryptJWT({
 			discord_access_token: discordAccessToken,
 			nonce: nonce,
@@ -278,12 +309,12 @@ describe('/token endpoint', () => {
 			code_challenge: codeChallenge,
 			code_challenge_method: 'S256',
 		})
-			.setProtectedHeader({ alg: 'dir', enc: 'A256GCM' })
+			.setProtectedHeader({ alg: 'ECDH-ES', enc: 'A256GCM' })
 			.setIssuedAt()
 			.setIssuer('http://localhost')
 			.setAudience(MOCK_OIDC_CLIENT_ID)
 			.setExpirationTime('5m')
-			.encrypt(base64urlToUint8Array(MOCK_CODE_SECRET));
+			.encrypt(codePublicKey);
 
 		const formData = new URLSearchParams({
 			grant_type: 'authorization_code',
@@ -300,5 +331,6 @@ describe('/token endpoint', () => {
 
 		expect(response.status).toBe(500);
 		expect(await response.json()).toEqual({ error: 'server_error', error_description: 'Failed to fetch user from Discord' });
+		consoleErrorSpy.mockRestore();
 	});
 });
