@@ -14,6 +14,7 @@
 		"production": {
             "vars": {
 				"DISCORD_CLIENT_ID": "1404871693767544893",
+				"DISCORD_GUILD_ID": "876131915424489472",
 				"OIDC_CLIENT_ID": "cloudflare-zero-trust",
 				"OIDC_REDIRECT_URI": "https://kaito-tokyo.cloudflareaccess.com/cdn-cgi/access/callback"
 			}
@@ -21,6 +22,7 @@
 		"test": {
             "vars": {
                 "DISCORD_CLIENT_ID": "discord-client-id",
+				"DISCORD_GUILD_ID": "discord-guild-id",
                 "OIDC_CLIENT_ID": "oidc-client-id",
                 "OIDC_CLIENT_SECRET": "uofmVIBq6YLoysekLqxqmfoe34tf7IYrYVsKGbtIfnQ=",
                 "OIDC_REDIRECT_URI": "http://localhost/callback",

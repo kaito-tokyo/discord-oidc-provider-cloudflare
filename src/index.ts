@@ -95,6 +95,10 @@ app.get('/auth', async (c) => {
 
   const discordScopes = ['identify'];
   if (scope.includes('email')) discordScopes.push('email');
+  // Add the new scope for reading guild members
+  if (c.env.DISCORD_GUILD_ID) { // Only request if guild ID is configured
+    discordScopes.push('guilds.members.read');
+  }
 
   // Pack the original request info into a JWT and pass it to Discord as state
   const stateJwt = await new SignJWT({
@@ -253,6 +257,20 @@ app.post('/token', async (c) => {
   }
   const user = (await userResponse.json()) as { id: string; username: string; avatar: string; email?: string; verified?: boolean };
 
+  let userRoles: string[] = [];
+  if (c.env.DISCORD_GUILD_ID) {
+    const guildMemberResponse = await fetch(`https://discord.com/api/users/@me/guilds/${c.env.DISCORD_GUILD_ID}/member`, {
+      headers: { Authorization: `Bearer ${codePayload.discord_access_token}` },
+    });
+
+    if (guildMemberResponse.ok) {
+      const guildMember = await guildMemberResponse.json() as { roles: string[] };
+      userRoles = guildMember.roles;
+    } else {
+      console.warn(`Failed to fetch guild member roles for guild ${c.env.DISCORD_GUILD_ID}:`, await guildMemberResponse.text());
+    }
+  }
+
   const privateJwk = JSON.parse(c.env.JWT_PRIVATE_KEY) as JWK;
   const privateKey = await importJWK(privateJwk, 'ES256');
 
@@ -263,6 +281,7 @@ app.post('/token', async (c) => {
     email: user.email,
     email_verified: user.verified,
     nonce: codePayload.nonce as string,
+    roles: userRoles, // Add roles claim here
   })
     .setProtectedHeader({ alg: 'ES256', kid: privateJwk.kid, typ: 'JWT' })
     .setIssuedAt()
@@ -297,44 +316,6 @@ app.post('/token', async (c) => {
     scope: codePayload.scope,
     id_token: idToken,
   });
-});
-
-// /userinfo - UserInfo endpoint
-app.get('/userinfo', async (c) => {
-  const authHeader = c.req.header('Authorization');
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    throw new HTTPException(401, { message: 'Missing or invalid Authorization header' });
-  }
-  const token = authHeader.substring(7);
-  const issuer = new URL(c.req.url).origin;
-
-  const privateJwk = JSON.parse(c.env.JWT_PRIVATE_KEY) as JWK;
-  const publicKey = await importJWK({ ...privateJwk, d: undefined }, 'ES256');
-
-  try {
-    const { payload } = await jwtVerify(token, publicKey, {
-      issuer: issuer,
-      audience: issuer,
-    });
-
-    // Filter claims to be returned based on scope
-    const claims: { [key: string]: any } = { sub: payload.sub };
-    const scopes = (payload.scope as string).split(' ');
-
-    if (scopes.includes('profile')) {
-      claims.name = payload.name;
-      claims.picture = payload.picture;
-    }
-    if (scopes.includes('email')) {
-      claims.email = payload.email;
-      claims.email_verified = payload.email_verified;
-    }
-
-    return c.json(claims);
-  } catch (err) {
-    console.error('userinfo token verification failed', err);
-    throw new HTTPException(401, { message: 'Invalid token' });
-  }
 });
 
 export default app;
