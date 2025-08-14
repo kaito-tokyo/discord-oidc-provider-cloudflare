@@ -10,6 +10,11 @@ interface TokenErrorResponse {
 	error_uri?: string;
 }
 
+interface OidcClient {
+	client_secret_hash: string;
+	redirect_uri: string;
+}
+
 const base64urlToUint8Array = (base64url: string): Uint8Array => {
 	const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/');
 	const bin = atob(base64);
@@ -69,9 +74,17 @@ app.get('/jwks.json', (c) => {
 app.get('/auth', async (c) => {
 	const { response_type, client_id, redirect_uri, scope, state, nonce, code_challenge, code_challenge_method } = c.req.query();
 
-	// Validate parameters
+	// Fetch client configuration from KV
+	if (!client_id) {
+		throw new HTTPException(400, { message: 'client_id is required' });
+	}
+	const client: OidcClient | null = await c.env.OIDC_CLIENTS.get(client_id, 'json');
+	if (!client) {
+		throw new HTTPException(400, { message: 'invalid client_id' });
+	}
+
 	// Validate redirect_uri first, as it's crucial for error redirection
-	if (redirect_uri !== c.env.OIDC_REDIRECT_URI) {
+	if (redirect_uri !== client.redirect_uri) {
 		throw new HTTPException(400, { message: 'invalid redirect_uri' });
 	}
 
@@ -87,7 +100,6 @@ app.get('/auth', async (c) => {
 	};
 
 	if (response_type !== 'code') return redirectToError('invalid_request', 'invalid response_type');
-	if (client_id !== c.env.OIDC_CLIENT_ID) return redirectToError('unauthorized_client', 'invalid client_id');
 	if (!scope?.includes('openid')) return redirectToError('invalid_scope', 'invalid scope');
 	if (!state) return redirectToError('invalid_request', 'state is required');
 	if (!code_challenge) return redirectToError('invalid_request', 'code_challenge is required');
@@ -112,6 +124,7 @@ app.get('/auth', async (c) => {
 		scope: scope,
 		code_challenge: code_challenge,
 		code_challenge_method: code_challenge_method || 'S256',
+		client_id: client_id, // Add client_id to state
 	})
 		.setProtectedHeader({ alg: 'HS256' })
 		.setIssuedAt()
@@ -183,7 +196,7 @@ app.get('/callback', async (c) => {
 		.setProtectedHeader({ alg: 'ECDH-ES', enc: 'A256GCM' })
 		.setIssuedAt()
 		.setIssuer(issuer)
-		.setAudience(c.env.OIDC_CLIENT_ID)
+		.setAudience(statePayload.client_id as string) // Use client_id from state
 		.setExpirationTime('5m')
 		.encrypt(codePublicKey);
 
@@ -214,16 +227,27 @@ app.post('/token', async (c) => {
 	let codePayload;
 	try {
 		const codePrivateKey = await importJWK(JSON.parse(c.env.CODE_PRIVATE_KEY) as JWK);
-		const { payload } = await jwtDecrypt(body.code as string, codePrivateKey, {
+		// Decrypt without audience verification first to get the client_id from the payload
+		const { payload: tempPayload } = await jwtDecrypt(body.code as string, codePrivateKey, {
 			issuer: issuer,
-			audience: c.env.OIDC_CLIENT_ID,
 		});
-		codePayload = payload;
+
+		// Now verify the audience using the client_id from the request body if present,
+		// or fallback to the audience from the token.
+		const clientIdFromRequest = body.client_id as string | undefined;
+		const audience = tempPayload.aud as string;
+
+		if (clientIdFromRequest && clientIdFromRequest !== audience) {
+			throw new Error('client_id mismatch');
+		}
+
+		codePayload = tempPayload;
 	} catch (e) {
 		console.error(e);
 		return c.json<TokenErrorResponse>({ error: 'invalid_grant', error_description: 'invalid authorization code' }, 400);
 	}
 
+	const client_id = codePayload.aud as string;
 	const isPkceFlowCode = !!codePayload.code_challenge;
 
 	// Handle PKCE vs. non-PKCE flows
@@ -253,7 +277,8 @@ app.post('/token', async (c) => {
 			);
 		}
 		// For non-PKCE flow, validate client_id and client_secret
-		if (body.client_id !== c.env.OIDC_CLIENT_ID) {
+		const client: OidcClient | null = await c.env.OIDC_CLIENTS.get(client_id, 'json');
+		if (!client) {
 			return c.json<TokenErrorResponse>({ error: 'invalid_client', error_description: 'invalid client_id' }, 401);
 		}
 
@@ -266,7 +291,7 @@ app.post('/token', async (c) => {
 			.map((b) => b.toString(16).padStart(2, '0'))
 			.join('');
 
-		if (secretHash !== c.env.OIDC_CLIENT_SECRET) {
+		if (secretHash !== client.client_secret_hash) {
 			return c.json<TokenErrorResponse>({ error: 'invalid_client', error_description: 'client_secret is invalid' }, 401);
 		}
 	}
@@ -323,7 +348,7 @@ app.post('/token', async (c) => {
 			nonce: codePayload.nonce as string,
 			roles: userRoles, // Add roles claim here
 		},
-		c.env.OIDC_CLIENT_ID,
+		client_id,
 		'1h',
 	);
 

@@ -1,7 +1,8 @@
 import { SELF } from 'cloudflare:test';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SignJWT, jwtDecrypt, importJWK } from 'jose';
 import wranglerJson from '../wrangler.json';
+import { setUpOidcClients, TEST_OIDC_CLIENT_ID, TEST_OIDC_REDIRECT_URI } from './test_helpers';
 
 // Helper to convert base64url to Uint8Array
 const base64urlToUint8Array = (base64url: string): Uint8Array => {
@@ -15,21 +16,27 @@ const base64urlToUint8Array = (base64url: string): Uint8Array => {
 };
 
 describe('/callback endpoint', () => {
-	const { STATE_SECRET, DISCORD_CLIENT_ID, OIDC_CLIENT_ID, OIDC_REDIRECT_URI, CODE_PRIVATE_KEY } = wranglerJson.env.test.vars;
+	const { STATE_SECRET, DISCORD_CLIENT_ID, CODE_PRIVATE_KEY } = wranglerJson.env.test.vars;
 
-	beforeEach(() => {
-		// Mock the global fetch function
-		global.fetch = vi.fn((input: RequestInfo | URL, _init?: RequestInit) => {
+	beforeEach(async () => {
+		const fetchSpy = vi.spyOn(global, 'fetch');
+		fetchSpy.mockImplementation((input: RequestInfo | URL, _init?: RequestInit) => {
 			if (typeof input === 'string' && input.startsWith('https://discord.com/api/oauth2/token')) {
 				return Promise.resolve(new Response(JSON.stringify({ access_token: 'discord_access_token' }), { status: 200 }));
 			}
 			return Promise.reject(new Error(`Unexpected fetch call to: ${input}`));
-		}) as any;
+		});
+
+		await setUpOidcClients();
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
 	});
 
 	it('should handle successful callback and redirect with OIDC code', async () => {
 		const originalState = 'random_state_string';
-		const redirectUri = OIDC_REDIRECT_URI;
+		const redirectUri = TEST_OIDC_REDIRECT_URI;
 		const nonce = 'random_nonce_string';
 		const scope = 'openid profile email';
 		const codeChallenge = 'code_challenge';
@@ -43,6 +50,7 @@ describe('/callback endpoint', () => {
 			scope: scope,
 			code_challenge: codeChallenge,
 			code_challenge_method: codeChallengeMethod,
+			client_id: TEST_OIDC_CLIENT_ID,
 		})
 			.setProtectedHeader({ alg: 'HS256' })
 			.setIssuedAt()
@@ -72,7 +80,7 @@ describe('/callback endpoint', () => {
 		// Verify the OIDC code (JWE)
 		const { payload: oidcCodePayload } = await jwtDecrypt(oidcCode!, codePrivateKey, {
 			issuer: 'http://localhost',
-			audience: OIDC_CLIENT_ID,
+			audience: TEST_OIDC_CLIENT_ID,
 		});
 
 		expect(oidcCodePayload.discord_access_token).toBe('discord_access_token');
@@ -113,7 +121,7 @@ describe('/callback endpoint', () => {
 		global.fetch = vi.fn(() => Promise.resolve(new Response('{}', { status: 400 }))) as any;
 
 		const originalState = 'random_state_string';
-		const redirectUri = OIDC_REDIRECT_URI;
+		const redirectUri = TEST_OIDC_REDIRECT_URI;
 		const nonce = 'random_nonce_string';
 		const scope = 'openid profile email';
 		const codeChallenge = 'code_challenge';
@@ -126,6 +134,7 @@ describe('/callback endpoint', () => {
 			scope: scope,
 			code_challenge: codeChallenge,
 			code_challenge_method: codeChallengeMethod,
+			client_id: TEST_OIDC_CLIENT_ID,
 		})
 			.setProtectedHeader({ alg: 'HS256' })
 			.setIssuedAt()
