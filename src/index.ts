@@ -22,8 +22,6 @@ const base64urlToUint8Array = (base64url: string): Uint8Array => {
 
 const app = new Hono<{ Bindings: Env }>();
 
-
-
 const getPublicJwk = (privateJwk: JWK): JWK => {
 	return {
 		kty: privateJwk.kty,
