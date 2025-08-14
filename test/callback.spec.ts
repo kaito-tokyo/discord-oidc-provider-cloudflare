@@ -15,13 +15,7 @@ const base64urlToUint8Array = (base64url: string): Uint8Array => {
 };
 
 describe('/callback endpoint', () => {
-	const {
-		STATE_SECRET,
-		DISCORD_CLIENT_ID,
-		OIDC_CLIENT_ID,
-		OIDC_REDIRECT_URI,
-		CODE_PRIVATE_KEY
-	} = wranglerJson.env.test.vars;
+	const { STATE_SECRET, DISCORD_CLIENT_ID, OIDC_CLIENT_ID, OIDC_REDIRECT_URI, CODE_PRIVATE_KEY } = wranglerJson.env.test.vars;
 
 	beforeEach(() => {
 		// Mock the global fetch function

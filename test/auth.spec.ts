@@ -3,11 +3,7 @@ import { describe, it, expect } from 'vitest';
 import wranglerJson from '../wrangler.json';
 
 describe('/auth', () => {
-	const {
-		OIDC_CLIENT_ID,
-		OIDC_REDIRECT_URI,
-		DISCORD_CLIENT_ID
-	} = wranglerJson.env.test.vars;
+	const { OIDC_CLIENT_ID, OIDC_REDIRECT_URI, DISCORD_CLIENT_ID } = wranglerJson.env.test.vars;
 
 	it('should redirect to Discord with valid parameters', async () => {
 		const params = new URLSearchParams({

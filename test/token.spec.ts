@@ -14,11 +14,7 @@ const generateCodeChallenge = async (codeVerifier: string): Promise<string> => {
 };
 
 describe('/token endpoint', () => {
-	const {
-		OIDC_CLIENT_ID,
-		CODE_PRIVATE_KEY,
-		JWT_PRIVATE_KEY
-	} = wranglerJson.env.test.vars;
+	const { OIDC_CLIENT_ID, CODE_PRIVATE_KEY, JWT_PRIVATE_KEY } = wranglerJson.env.test.vars;
 
 	beforeEach(() => {
 		// Mock the global fetch function for Discord API calls
