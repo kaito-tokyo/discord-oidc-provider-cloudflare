@@ -16,6 +16,11 @@ concurrency:
   cancel-in-progress: "${{ github.ref != 'refs/heads/main' }}"
 
 jobs:
+  PushLint:
+    uses: './.github/workflows/push-lint.yaml'
+    permissions:
+      contents: 'read'
+
   PushPrettier:
     uses: './.github/workflows/push-prettier.yaml'
     permissions:
