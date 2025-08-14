@@ -35,7 +35,7 @@ npm install
 
 ### 4. 環境変数の設定
 
-`wrangler.jsonc` を参考に、環境変数を設定します。ローカル開発用には `.dev.vars` ファイルを作成します。
+`wrangler.json` を参考に、環境変数を設定します。ローカル開発用には `.dev.vars` ファイルを作成します。
 
 ```ini
 # .dev.vars
