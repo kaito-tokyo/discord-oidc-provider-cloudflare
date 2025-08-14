@@ -18,7 +18,7 @@
 		"uuid": "^11.1.0"
 	},
 	"devDependencies": {
-		"@cloudflare/vitest-pool-workers": "^0.8.19",
+		"@cloudflare/vitest-pool-workers": "^0.8.63",
 		"@types/uuid": "^10.0.0",
 		"jose-cli": "^2.0.3",
 		"typescript": "^5.5.2",
