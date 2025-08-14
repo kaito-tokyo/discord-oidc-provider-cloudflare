@@ -9,7 +9,7 @@ export async function setUpOidcClients() {
 	await env.OIDC_CLIENTS.put(
 		TEST_OIDC_CLIENT_ID,
 		JSON.stringify({
-			redirect_uri: TEST_OIDC_REDIRECT_URI,
+			redirect_uris: [TEST_OIDC_REDIRECT_URI],
 			client_secret_hash: TEST_OIDC_CLIENT_SECRET,
 		}),
 	);

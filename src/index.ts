@@ -12,7 +12,7 @@ interface TokenErrorResponse {
 
 interface OidcClient {
 	client_secret_hash: string;
-	redirect_uri: string;
+	redirect_uris: string[];
 }
 
 const base64urlToUint8Array = (base64url: string): Uint8Array => {
@@ -84,7 +84,7 @@ app.get('/auth', async (c) => {
 	}
 
 	// Validate redirect_uri first, as it's crucial for error redirection
-	if (redirect_uri !== client.redirect_uri) {
+	if (!client.redirect_uris.includes(redirect_uri)) {
 		throw new HTTPException(400, { message: 'invalid redirect_uri' });
 	}
 
