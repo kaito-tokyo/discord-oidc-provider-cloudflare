@@ -22,6 +22,41 @@ const base64urlToUint8Array = (base64url: string): Uint8Array => {
 
 const app = new Hono<{ Bindings: Env }>();
 
+// Middleware for environment variable validation
+app.use('*', (c, next) => {
+	const requiredEnv: (keyof Env)[] = [
+		'DISCORD_CLIENT_ID',
+		'DISCORD_CLIENT_SECRET',
+		'OIDC_CLIENT_ID',
+		'OIDC_CLIENT_SECRET',
+		'OIDC_REDIRECT_URI',
+		'JWT_PRIVATE_KEY',
+		'CODE_PRIVATE_KEY',
+		'STATE_SECRET',
+	];
+
+	const missingEnv = requiredEnv.filter((key) => !c.env[key]);
+
+	if (missingEnv.length > 0) {
+		console.error(`Missing required environment variables: ${missingEnv.join(', ')}`);
+		throw new HTTPException(500, { message: 'Internal Server Configuration Error' });
+	}
+
+	return next();
+});
+
+const getPublicJwk = (privateJwk: JWK): JWK => {
+	return {
+		kty: privateJwk.kty,
+		crv: privateJwk.crv,
+		x: privateJwk.x,
+		y: privateJwk.y,
+		alg: 'ES256',
+		kid: privateJwk.kid,
+		use: 'sig',
+	};
+};
+
 // .well-known/openid-configuration
 app.get('/.well-known/openid-configuration', (c) => {
 	const issuer = new URL(c.req.url).origin;
@@ -30,7 +65,7 @@ app.get('/.well-known/openid-configuration', (c) => {
 		authorization_endpoint: `${issuer}/auth`,
 		token_endpoint: `${issuer}/token`,
 		jwks_uri: `${issuer}/jwks.json`,
-		userinfo_endpoint: `${issuer}/userinfo`, // Add userinfo endpoint
+		userinfo_endpoint: `${issuer}/userinfo`,
 		response_types_supported: ['code'],
 		subject_types_supported: ['public'],
 		id_token_signing_alg_values_supported: ['ES256'],
@@ -45,16 +80,7 @@ app.get('/.well-known/openid-configuration', (c) => {
 app.get('/jwks.json', (c) => {
 	try {
 		const privateJwk = JSON.parse(c.env.JWT_PRIVATE_KEY) as JWK;
-		// Extract only public key information from the private key
-		const publicJwk: JWK = {
-			kty: privateJwk.kty,
-			crv: privateJwk.crv,
-			x: privateJwk.x,
-			y: privateJwk.y,
-			alg: 'ES256',
-			kid: privateJwk.kid,
-			use: 'sig',
-		};
+		const publicJwk = getPublicJwk(privateJwk);
 		return c.json({ keys: [publicJwk] });
 	} catch (e) {
 		console.error('Failed to parse JWT_PRIVATE_KEY or create public JWK:', e);
@@ -155,7 +181,7 @@ app.get('/callback', async (c) => {
 	});
 
 	if (!tokenResponse.ok) {
-		console.error('Discord token exchange failed:', await tokenResponse.text());
+		console.error(`Discord token exchange failed with status: ${tokenResponse.status}`, await tokenResponse.text());
 		throw new HTTPException(500, { message: 'Discord token exchange failed' });
 	}
 	const discordTokens = (await tokenResponse.json()) as { access_token: string };
@@ -263,7 +289,7 @@ app.post('/token', async (c) => {
 	});
 
 	if (!userResponse.ok) {
-		console.error('Discord token exchange failed:', await userResponse.text());
+		console.error(`Failed to fetch user from Discord with status: ${userResponse.status}`, await userResponse.text());
 		return c.json<TokenErrorResponse>({ error: 'server_error', error_description: 'Failed to fetch user from Discord' }, 500);
 	}
 	const user = (await userResponse.json()) as { id: string; username: string; avatar: string; email?: string; verified?: boolean };
@@ -278,47 +304,54 @@ app.post('/token', async (c) => {
 			const guildMember = (await guildMemberResponse.json()) as { roles: string[] };
 			userRoles = guildMember.roles;
 		} else {
-			console.warn(`Failed to fetch guild member roles for guild ${c.env.DISCORD_GUILD_ID}:`, await guildMemberResponse.text());
+			console.warn(
+				`Failed to fetch guild member roles for guild ${c.env.DISCORD_GUILD_ID} with status: ${guildMemberResponse.status}`,
+				await guildMemberResponse.text(),
+			);
 		}
 	}
 
 	const privateJwk = JSON.parse(c.env.JWT_PRIVATE_KEY) as JWK;
 	const privateKey = await importJWK(privateJwk, 'ES256');
 
+	const generateToken = async (payload: object, audience: string, expiresIn: string) => {
+		return await new SignJWT({ ...payload, sub: user.id })
+			.setProtectedHeader({ alg: 'ES256', kid: privateJwk.kid, typ: 'JWT' })
+			.setIssuedAt()
+			.setIssuer(issuer)
+			.setAudience(audience)
+			.setSubject(user.id)
+			.setExpirationTime(expiresIn)
+			.sign(privateKey);
+	};
+
 	// Generate ID token
-	const idToken = await new SignJWT({
-		name: user.username,
-		picture: `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png`,
-		email: user.email,
-		email_verified: user.verified,
-		nonce: codePayload.nonce as string,
-		roles: userRoles, // Add roles claim here
-	})
-		.setProtectedHeader({ alg: 'ES256', kid: privateJwk.kid, typ: 'JWT' })
-		.setIssuedAt()
-		.setIssuer(issuer)
-		.setAudience(c.env.OIDC_CLIENT_ID)
-		.setSubject(user.id)
-		.setExpirationTime('1h')
-		.sign(privateKey);
+	const idToken = await generateToken(
+		{
+			name: user.username,
+			picture: `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png`,
+			email: user.email,
+			email_verified: user.verified,
+			nonce: codePayload.nonce as string,
+			roles: userRoles, // Add roles claim here
+		},
+		c.env.OIDC_CLIENT_ID,
+		'1h'
+	);
 
 	// Generate access token for the UserInfo endpoint
-	const accessToken = await new SignJWT({
-		// Include claims to be returned by userinfo
-		sub: user.id,
-		name: user.username,
-		picture: `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png`,
-		email: user.email,
-		email_verified: user.verified,
-		scope: codePayload.scope,
-	})
-		.setProtectedHeader({ alg: 'ES256', kid: privateJwk.kid, typ: 'JWT' })
-		.setIssuedAt()
-		.setIssuer(issuer)
-		.setAudience(issuer) // Audience is the provider itself (the userinfo endpoint)
-		.setSubject(user.id)
-		.setExpirationTime('1h')
-		.sign(privateKey);
+	const accessToken = await generateToken(
+		{
+			// Include claims to be returned by userinfo
+			name: user.username,
+			picture: `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png`,
+			email: user.email,
+			email_verified: user.verified,
+			scope: codePayload.scope,
+		},
+		issuer, // Audience is the provider itself (the userinfo endpoint)
+		'1h'
+	);
 
 	return c.json({
 		access_token: accessToken,
