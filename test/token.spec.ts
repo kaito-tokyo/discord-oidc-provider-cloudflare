@@ -235,7 +235,67 @@ describe('/token endpoint', () => {
 		});
 
 		expect(response.status).toBe(401);
-		expect(await response.json()).toEqual({ error: 'invalid_client', error_description: 'client_secret is required or invalid' });
+		expect(await response.json()).toEqual({ error: 'invalid_client', error_description: 'client_secret is invalid' });
+	});
+
+	it('should successfully exchange authorization code for tokens without PKCE (client_secret)', async () => {
+		const discordAccessToken = 'discord_access_token';
+		const nonce = 'test_nonce';
+		const scope = 'openid profile email';
+
+		// Create a mock OIDC authorization code (JWE)
+		const codePrivateKey = JSON.parse(CODE_PRIVATE_KEY);
+		const codePublicKey = await importJWK({ ...codePrivateKey, d: undefined });
+		const oidcCode = await new EncryptJWT({
+			discord_access_token: discordAccessToken,
+			nonce: nonce,
+			scope: scope,
+		})
+			.setProtectedHeader({ alg: 'ECDH-ES', enc: 'A256GCM' })
+			.setIssuedAt()
+			.setIssuer('http://localhost')
+			.setAudience(OIDC_CLIENT_ID)
+			.setExpirationTime('5m')
+			.encrypt(codePublicKey);
+
+		const formData = new URLSearchParams({
+			grant_type: 'authorization_code',
+			client_id: OIDC_CLIENT_ID,
+			client_secret: 'a', // The real secret
+			code: oidcCode,
+		});
+
+		const response = await SELF.fetch('http://localhost/token', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+			body: formData.toString(),
+		});
+
+		expect(response.status).toBe(200);
+		const body = await response.json();
+
+		expect(body.access_token).toBeDefined();
+		expect(body.token_type).toBe('Bearer');
+		expect(body.expires_in).toBe(3600);
+		expect(body.scope).toBe(scope);
+		expect(body.id_token).toBeDefined();
+
+		// Verify id_token
+		const privateJwk = JSON.parse(JWT_PRIVATE_KEY);
+		const publicKey = await importJWK({ ...privateJwk, d: undefined }, 'ES256');
+		const { payload: idTokenPayload } = await jwtVerify(body.id_token, publicKey, {
+			issuer: 'http://localhost',
+			audience: OIDC_CLIENT_ID,
+		});
+
+		expect(idTokenPayload.name).toBe('testuser');
+		expect(idTokenPayload.picture).toBe('https://cdn.discordapp.com/avatars/discord_user_id/testavatar.png');
+		expect(idTokenPayload.email).toBe('test@example.com');
+		expect(idTokenPayload.email_verified).toBe(true);
+		expect(idTokenPayload.nonce).toBe(nonce);
+		expect(idTokenPayload.iss).toBe('http://localhost');
+		expect(idTokenPayload.aud).toBe(OIDC_CLIENT_ID);
+		expect(idTokenPayload.sub).toBe('discord_user_id');
 	});
 
 	it('should return 400 if code is missing', async () => {
