@@ -1,18 +1,7 @@
 import { SELF } from 'cloudflare:test';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { SignJWT, jwtDecrypt, EncryptJWT, importJWK, jwtVerify } from 'jose';
+import { EncryptJWT, importJWK, jwtVerify } from 'jose';
 import { TextEncoder } from 'util';
-
-// Helper to convert base64url to Uint8Array
-const base64urlToUint8Array = (base64url: string): Uint8Array => {
-	const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/');
-	const bin = atob(base64);
-	const uint8Array = new Uint8Array(bin.length);
-	for (let i = 0; i < bin.length; i++) {
-		uint8Array[i] = bin.charCodeAt(i);
-	}
-	return uint8Array;
-};
 
 // Helper to generate a code_challenge from a code_verifier
 const generateCodeChallenge = async (codeVerifier: string): Promise<string> => {

@@ -1,7 +1,6 @@
 import { SELF } from 'cloudflare:test';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { SignJWT, jwtDecrypt, EncryptJWT, importJWK } from 'jose';
-import { TextEncoder } from 'util';
+import { SignJWT, jwtDecrypt, importJWK } from 'jose';
 
 // Helper to convert base64url to Uint8Array
 const base64urlToUint8Array = (base64url: string): Uint8Array => {
@@ -17,7 +16,6 @@ const base64urlToUint8Array = (base64url: string): Uint8Array => {
 describe('/callback endpoint', () => {
 	const MOCK_STATE_SECRET = 'q9DpQgBtc4yoUFYtZgHDXfJNhxfgbRc3qJttmqyLjWI=';
 	const MOCK_DISCORD_CLIENT_ID = 'discord-client-id';
-	const MOCK_DISCORD_CLIENT_SECRET = 'discord-client-secret';
 	const MOCK_OIDC_CLIENT_ID = 'oidc-client-id';
 	const MOCK_OIDC_REDIRECT_URI = 'http://localhost/redirect';
 	const MOCK_CODE_PRIVATE_KEY =
@@ -25,7 +23,7 @@ describe('/callback endpoint', () => {
 
 	beforeEach(() => {
 		// Mock the global fetch function
-		global.fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+		global.fetch = vi.fn((input: RequestInfo | URL, _init?: RequestInit) => {
 			if (typeof input === 'string' && input.startsWith('https://discord.com/api/oauth2/token')) {
 				return Promise.resolve(new Response(JSON.stringify({ access_token: 'mock_discord_access_token' }), { status: 200 }));
 			}

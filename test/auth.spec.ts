@@ -1,5 +1,5 @@
 import { SELF } from 'cloudflare:test';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 
 describe('/auth', () => {
 	const MOCK_OIDC_CLIENT_ID = 'oidc-client-id';
