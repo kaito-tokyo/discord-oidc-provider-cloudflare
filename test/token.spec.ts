@@ -2,6 +2,7 @@ import { SELF } from 'cloudflare:test';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { EncryptJWT, importJWK, jwtVerify } from 'jose';
 import { TextEncoder } from 'util';
+import wranglerJson from '../wrangler.json';
 
 // Helper to generate a code_challenge from a code_verifier
 const generateCodeChallenge = async (codeVerifier: string): Promise<string> => {
@@ -13,11 +14,11 @@ const generateCodeChallenge = async (codeVerifier: string): Promise<string> => {
 };
 
 describe('/token endpoint', () => {
-	const OIDC_CLIENT_ID = 'oidc-client-id';
-	const CODE_PRIVATE_KEY =
-		'{"kty":"EC","x":"BNo3Mq2cH_F3gjVMNarajk6CEe7ACnog1AYEnUO0N8g","y":"PsSNgkm5Jpy8p8rc8HH0U9fa4-dCEJG81kxI2yQArH8","crv":"P-256","d":"y2y53r0Z9e2OorJwFDlezhLBNv7qekxDOft2dzbFTRo","use":"enc","alg":"ECDH-ES+A256KW","kid":"0198a59b-82af-765a-b25b-3e378297a2a0"}';
-	const JWT_PRIVATE_KEY =
-		'{"kty":"EC","x":"Vb5MIA7WsDQzqjsV8udvwNIvhZ7HWZxzyAstzCyR5xk","y":"8Lc4Y0Ke0wBH9T7v6179zjaCeCaiDNRK2OtUA_YVbn8","crv":"P-256","d":"teLx5xvxFjeXua4rfvaxegX2andBE2F8Ysa8qLNf8Bo","use":"sig","alg":"ES256","kid":"0198a5b0-a018-7756-a4e3-ebf3f0dd9cfe"}';
+	const {
+		OIDC_CLIENT_ID,
+		CODE_PRIVATE_KEY,
+		JWT_PRIVATE_KEY
+	} = wranglerJson.env.test.vars;
 
 	beforeEach(() => {
 		// Mock the global fetch function for Discord API calls

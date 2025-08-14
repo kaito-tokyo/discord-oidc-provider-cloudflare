@@ -1,10 +1,13 @@
 import { SELF } from 'cloudflare:test';
 import { describe, it, expect } from 'vitest';
+import wranglerJson from '../wrangler.json';
 
 describe('/auth', () => {
-	const OIDC_CLIENT_ID = 'oidc-client-id';
-	const OIDC_REDIRECT_URI = 'http://localhost/callback';
-	const DISCORD_CLIENT_ID = 'discord-client-id';
+	const {
+		OIDC_CLIENT_ID,
+		OIDC_REDIRECT_URI,
+		DISCORD_CLIENT_ID
+	} = wranglerJson.env.test.vars;
 
 	it('should redirect to Discord with valid parameters', async () => {
 		const params = new URLSearchParams({

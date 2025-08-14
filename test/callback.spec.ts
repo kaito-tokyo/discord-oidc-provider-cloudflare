@@ -1,6 +1,7 @@
 import { SELF } from 'cloudflare:test';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SignJWT, jwtDecrypt, importJWK } from 'jose';
+import wranglerJson from '../wrangler.json';
 
 // Helper to convert base64url to Uint8Array
 const base64urlToUint8Array = (base64url: string): Uint8Array => {
@@ -14,18 +15,19 @@ const base64urlToUint8Array = (base64url: string): Uint8Array => {
 };
 
 describe('/callback endpoint', () => {
-	const MOCK_STATE_SECRET = 'q9DpQgBtc4yoUFYtZgHDXfJNhxfgbRc3qJttmqyLjWI=';
-	const MOCK_DISCORD_CLIENT_ID = 'discord-client-id';
-	const MOCK_OIDC_CLIENT_ID = 'oidc-client-id';
-	const MOCK_OIDC_REDIRECT_URI = 'http://localhost/redirect';
-	const MOCK_CODE_PRIVATE_KEY =
-		'{"kty":"EC","x":"BNo3Mq2cH_F3gjVMNarajk6CEe7ACnog1AYEnUO0N8g","y":"PsSNgkm5Jpy8p8rc8HH0U9fa4-dCEJG81kxI2yQArH8","crv":"P-256","d":"y2y53r0Z9e2OorJwFDlezhLBNv7qekxDOft2dzbFTRo","use":"enc","alg":"ECDH-ES+A256KW","kid":"0198a59b-82af-765a-b25b-3e378297a2a0"}';
+	const {
+		STATE_SECRET,
+		DISCORD_CLIENT_ID,
+		OIDC_CLIENT_ID,
+		OIDC_REDIRECT_URI,
+		CODE_PRIVATE_KEY
+	} = wranglerJson.env.test.vars;
 
 	beforeEach(() => {
 		// Mock the global fetch function
 		global.fetch = vi.fn((input: RequestInfo | URL, _init?: RequestInit) => {
 			if (typeof input === 'string' && input.startsWith('https://discord.com/api/oauth2/token')) {
-				return Promise.resolve(new Response(JSON.stringify({ access_token: 'mock_discord_access_token' }), { status: 200 }));
+				return Promise.resolve(new Response(JSON.stringify({ access_token: 'discord_access_token' }), { status: 200 }));
 			}
 			return Promise.reject(new Error(`Unexpected fetch call to: ${input}`));
 		}) as any;
@@ -33,10 +35,10 @@ describe('/callback endpoint', () => {
 
 	it('should handle successful callback and redirect with OIDC code', async () => {
 		const originalState = 'random_state_string';
-		const redirectUri = MOCK_OIDC_REDIRECT_URI;
+		const redirectUri = OIDC_REDIRECT_URI;
 		const nonce = 'random_nonce_string';
 		const scope = 'openid profile email';
-		const codeChallenge = 'mock_code_challenge';
+		const codeChallenge = 'code_challenge';
 		const codeChallengeMethod = 'S256';
 
 		// Create a mock state JWT
@@ -51,11 +53,11 @@ describe('/callback endpoint', () => {
 			.setProtectedHeader({ alg: 'HS256' })
 			.setIssuedAt()
 			.setIssuer('http://localhost')
-			.setAudience(MOCK_DISCORD_CLIENT_ID)
+			.setAudience(DISCORD_CLIENT_ID)
 			.setExpirationTime('10m')
-			.sign(base64urlToUint8Array(MOCK_STATE_SECRET));
+			.sign(base64urlToUint8Array(STATE_SECRET));
 
-		const discordAuthCode = 'mock_discord_auth_code';
+		const discordAuthCode = 'discord_auth_code';
 
 		const response = await SELF.fetch(`http://localhost/callback?code=${discordAuthCode}&state=${stateJwt}`, { redirect: 'manual' });
 
@@ -71,15 +73,15 @@ describe('/callback endpoint', () => {
 		const oidcCode = redirectUrl.searchParams.get('code');
 		expect(oidcCode).toBeDefined();
 
-		const codePrivateKey = await importJWK(JSON.parse(MOCK_CODE_PRIVATE_KEY));
+		const codePrivateKey = await importJWK(JSON.parse(CODE_PRIVATE_KEY));
 
 		// Verify the OIDC code (JWE)
 		const { payload: oidcCodePayload } = await jwtDecrypt(oidcCode!, codePrivateKey, {
 			issuer: 'http://localhost',
-			audience: MOCK_OIDC_CLIENT_ID,
+			audience: OIDC_CLIENT_ID,
 		});
 
-		expect(oidcCodePayload.discord_access_token).toBe('mock_discord_access_token');
+		expect(oidcCodePayload.discord_access_token).toBe('discord_access_token');
 		expect(oidcCodePayload.nonce).toBe(nonce);
 		expect(oidcCodePayload.scope).toBe(scope);
 		expect(oidcCodePayload.code_challenge).toBe(codeChallenge);
@@ -95,7 +97,7 @@ describe('/callback endpoint', () => {
 	});
 
 	it('should return 400 if state is missing', async () => {
-		const discordAuthCode = 'mock_discord_auth_code';
+		const discordAuthCode = 'discord_auth_code';
 		const response = await SELF.fetch(`http://localhost/callback?code=${discordAuthCode}`, { redirect: 'manual' });
 		expect(response.status).toBe(400);
 		const body = await response.text();
@@ -104,7 +106,7 @@ describe('/callback endpoint', () => {
 
 	it('should return 500 if state JWT verification fails', async () => {
 		const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-		const discordAuthCode = 'mock_discord_auth_code';
+		const discordAuthCode = 'discord_auth_code';
 		const invalidStateJwt = 'invalid.jwt.signature'; // An invalid JWT
 		const response = await SELF.fetch(`http://localhost/callback?code=${discordAuthCode}&state=${invalidStateJwt}`, { redirect: 'manual' });
 		expect(response.status).toBe(500); // Hono's HTTPException for JWT verification failure
@@ -117,10 +119,10 @@ describe('/callback endpoint', () => {
 		global.fetch = vi.fn(() => Promise.resolve(new Response('{}', { status: 400 }))) as any;
 
 		const originalState = 'random_state_string';
-		const redirectUri = MOCK_OIDC_REDIRECT_URI;
+		const redirectUri = OIDC_REDIRECT_URI;
 		const nonce = 'random_nonce_string';
 		const scope = 'openid profile email';
-		const codeChallenge = 'mock_code_challenge';
+		const codeChallenge = 'code_challenge';
 		const codeChallengeMethod = 'S256';
 
 		const stateJwt = await new SignJWT({
@@ -134,11 +136,11 @@ describe('/callback endpoint', () => {
 			.setProtectedHeader({ alg: 'HS256' })
 			.setIssuedAt()
 			.setIssuer('http://localhost')
-			.setAudience(MOCK_DISCORD_CLIENT_ID)
+			.setAudience(DISCORD_CLIENT_ID)
 			.setExpirationTime('10m')
-			.sign(base64urlToUint8Array(MOCK_STATE_SECRET));
+			.sign(base64urlToUint8Array(STATE_SECRET));
 
-		const discordAuthCode = 'mock_discord_auth_code';
+		const discordAuthCode = 'discord_auth_code';
 
 		const response = await SELF.fetch(`http://localhost/callback?code=${discordAuthCode}&state=${stateJwt}`, { redirect: 'manual' });
 		expect(response.status).toBe(500);
