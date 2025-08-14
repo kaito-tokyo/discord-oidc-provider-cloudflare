@@ -22,28 +22,7 @@ const base64urlToUint8Array = (base64url: string): Uint8Array => {
 
 const app = new Hono<{ Bindings: Env }>();
 
-// Middleware for environment variable validation
-app.use('*', (c, next) => {
-	const requiredEnv: (keyof Env)[] = [
-		'DISCORD_CLIENT_ID',
-		'DISCORD_CLIENT_SECRET',
-		'OIDC_CLIENT_ID',
-		'OIDC_CLIENT_SECRET',
-		'OIDC_REDIRECT_URI',
-		'JWT_PRIVATE_KEY',
-		'CODE_PRIVATE_KEY',
-		'STATE_SECRET',
-	];
 
-	const missingEnv = requiredEnv.filter((key) => !c.env[key]);
-
-	if (missingEnv.length > 0) {
-		console.error(`Missing required environment variables: ${missingEnv.join(', ')}`);
-		throw new HTTPException(500, { message: 'Internal Server Configuration Error' });
-	}
-
-	return next();
-});
 
 const getPublicJwk = (privateJwk: JWK): JWK => {
 	return {
