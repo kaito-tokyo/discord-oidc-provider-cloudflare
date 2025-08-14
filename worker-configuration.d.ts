@@ -3,9 +3,11 @@
 // Runtime types generated with workerd@1.20250803.0 2025-08-03 
 declare namespace Cloudflare {
 	interface Env {
-		OIDC_CLIENTS: KVNamespace;
 		DISCORD_CLIENT_ID: string;
 		DISCORD_GUILD_ID: string;
+		OIDC_CLIENT_ID: string;
+		OIDC_REDIRECT_URI: string;
+		OIDC_CLIENT_SECRET: string;
 		CODE_PRIVATE_KEY: string;
 		DISCORD_CLIENT_SECRET: string;
 		JWT_PRIVATE_KEY: string;
