@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import { SignJWT, jwtVerify, EncryptJWT, jwtDecrypt, importJWK } from 'jose';
-import type { JWK } from 'jose';
+import type { JWK, JWTPayload } from 'jose';
 import { v7 as uuidv7 } from 'uuid';
 
 interface TokenErrorResponse {
@@ -315,7 +315,7 @@ app.post('/token', async (c) => {
 	const privateJwk = JSON.parse(c.env.JWT_PRIVATE_KEY) as JWK;
 	const privateKey = await importJWK(privateJwk, 'ES256');
 
-	const generateToken = async (payload: object, audience: string, expiresIn: string) => {
+	const generateToken = async (payload: JWTPayload, audience: string, expiresIn: string) => {
 		return await new SignJWT({ ...payload, sub: user.id })
 			.setProtectedHeader({ alg: 'ES256', kid: privateJwk.kid, typ: 'JWT' })
 			.setIssuedAt()
@@ -337,7 +337,7 @@ app.post('/token', async (c) => {
 			roles: userRoles, // Add roles claim here
 		},
 		c.env.OIDC_CLIENT_ID,
-		'1h'
+		'1h',
 	);
 
 	// Generate access token for the UserInfo endpoint
@@ -351,7 +351,7 @@ app.post('/token', async (c) => {
 			scope: codePayload.scope,
 		},
 		issuer, // Audience is the provider itself (the userinfo endpoint)
-		'1h'
+		'1h',
 	);
 
 	return c.json({

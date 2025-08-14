@@ -31,7 +31,7 @@ npm install
 1.  [Discord Developer Portal](https://discord.com/developers/applications)にアクセスし、新しいアプリケーションを作成します。
 2.  **OAuth2** タブに移動し、`CLIENT ID` と `CLIENT SECRET` を控えておきます。
 3.  **Redirects** に、デプロイしたWorkerのコールバックURLを追加します。
-    -   例: `https://<YOUR_WORKER_NAME>.<YOUR_CLOUDFLARE_SUBDOMAIN>.workers.dev/callback`
+    - 例: `https://<YOUR_WORKER_NAME>.<YOUR_CLOUDFLARE_SUBDOMAIN>.workers.dev/callback`
 
 ### 4. 環境変数の設定
 
@@ -59,6 +59,7 @@ OIDC_REDIRECT_URI="YOUR_OIDC_CLIENT_REDIRECT_URI"
 以下のコマンドを実行して、JWTの署名やJWEの暗号化に必要なキーを生成し、CloudflareのSecretに設定します。
 
 **本番環境 (production)**
+
 ```bash
 # JWTの署名に使うES256キーペア
 npm run setup:jwt_private_key
@@ -69,6 +70,7 @@ npm run setup:code_private_key
 # stateの署名に使うシークレット
 npm run setup:state_secret
 ```
+
 ローカル開発の場合は、`--env=development` をつけて実行するか、手動で `.dev.vars` に設定してください。
 
 ### 6. デプロイ
@@ -81,17 +83,17 @@ npm run deploy
 
 OIDCをサポートするアプリケーション（例: Grafana, GitLab, etc.）の認証設定で、以下の情報を設定します。
 
--   **Issuer URL**: `https://<YOUR_WORKER_NAME>.<YOUR_CLOUDFLARE_SUBDOMAIN>.workers.dev`
--   **Client ID**: `OIDC_CLIENT_ID` で設定した値
--   **Client Secret**: `OIDC_CLIENT_SECRET` で設定した値
+- **Issuer URL**: `https://<YOUR_WORKER_NAME>.<YOUR_CLOUDFLARE_SUBDOMAIN>.workers.dev`
+- **Client ID**: `OIDC_CLIENT_ID` で設定した値
+- **Client Secret**: `OIDC_CLIENT_SECRET` で設定した値
 
 アプリケーションが自動的に `.well-known/openid-configuration` を検出し、設定が完了します。
 
 ## APIエンドポイント
 
--   `/.well-known/openid-configuration`: OIDCプロバイダーの設定情報を提供します。
--   `/jwks.json`: IDトークンの署名検証に使われる公開鍵を提供します。
--   `/auth`: 認可エンドポイント。
--   `/token`: トークンエンドポイント。
--   `/userinfo`: ユーザー情報エンドポイント。
--   `/callback`: Discordからのリダイレクトを受け取る内部エンドポイント。
+- `/.well-known/openid-configuration`: OIDCプロバイダーの設定情報を提供します。
+- `/jwks.json`: IDトークンの署名検証に使われる公開鍵を提供します。
+- `/auth`: 認可エンドポイント。
+- `/token`: トークンエンドポイント。
+- `/userinfo`: ユーザー情報エンドポイント。
+- `/callback`: Discordからのリダイレクトを受け取る内部エンドポイント。
