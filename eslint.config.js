@@ -34,7 +34,7 @@ export default tseslint.config(
 			'node_modules/',
 			'eslint.config.js',
 			'vitest.config.mts',
-			'wrangler.jsonc',
+			'wrangler.json',
 			'worker-configuration.d.ts',
 			'test/env.d.ts',
 		],
