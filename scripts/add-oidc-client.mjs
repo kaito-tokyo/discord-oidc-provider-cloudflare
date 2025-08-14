@@ -14,9 +14,14 @@ function generateRandomNumberString(length) {
 function generateRandomAlphanumeric(length) {
 	const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
 	let result = '';
-	const randomBytes = crypto.randomBytes(length);
-	for (let i = 0; i < length; i++) {
-		result += chars[randomBytes[i] % chars.length];
+	const charsLen = chars.length;
+	const maxMultiple = Math.floor(256 / charsLen) * charsLen;
+	while (result.length < length) {
+		const byte = crypto.randomBytes(1)[0];
+		if (byte >= maxMultiple) {
+			continue;
+		}
+		result += chars[byte % charsLen];
 	}
 	return result;
 }
