@@ -243,6 +243,7 @@ app.post('/token', async (c) => {
 		});
 		codePayload = payload;
 	} catch (e) {
+		console.error(e);
 		return c.json<TokenErrorResponse>({ error: 'invalid_grant', error_description: 'invalid authorization code' }, 400);
 	}
 
