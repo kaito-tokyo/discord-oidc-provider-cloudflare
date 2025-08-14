@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EncryptJWT, importJWK, jwtVerify } from 'jose';
 import { TextEncoder } from 'util';
 import wranglerJson from '../wrangler.json';
-import { setUpOidcClients, TEST_OIDC_CLIENT_ID } from './test_helpers';
+import { setUpOidcClients, TEST_OIDC_CLIENT_ID, TEST_OIDC_CLIENT_SECRET } from './test_helpers';
 
 // Helper to generate a code_challenge from a code_verifier
 const generateCodeChallenge = async (codeVerifier: string): Promise<string> => {
@@ -266,7 +266,7 @@ describe('/token endpoint', () => {
 		const formData = new URLSearchParams({
 			grant_type: 'authorization_code',
 			client_id: TEST_OIDC_CLIENT_ID,
-			client_secret: 'a', // The real secret
+			client_secret: TEST_OIDC_CLIENT_SECRET,
 			code: oidcCode,
 		});
 
