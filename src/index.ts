@@ -308,7 +308,7 @@ app.post('/token', async (c) => {
 	const user = (await userResponse.json()) as { id: string; username: string; avatar: string; email?: string; verified?: boolean };
 
 	let userRoles: string[] = [];
-	if (c.env.DISCORD_GUILD_IDS) {
+	if (typeof c.env.DISCORD_GUILD_IDS === 'string' && c.env.DISCORD_GUILD_IDS.trim().length > 0) {
 		const guildIds = c.env.DISCORD_GUILD_IDS.split(',')
 			.map((id) => id.trim())
 			.filter((id) => id.length > 0);
