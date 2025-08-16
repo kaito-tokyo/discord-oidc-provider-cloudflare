@@ -110,7 +110,7 @@ app.get('/auth', async (c) => {
 	const discordScopes = ['identify'];
 	if (scope.includes('email')) discordScopes.push('email');
 	// Add the new scope for reading guild members
-	if (c.env.DISCORD_GUILD_ID) {
+	if (c.env.DISCORD_GUILD_IDS) {
 		// Only request if guild ID is configured
 		discordScopes.push('guilds.members.read');
 	}
@@ -308,19 +308,30 @@ app.post('/token', async (c) => {
 	const user = (await userResponse.json()) as { id: string; username: string; avatar: string; email?: string; verified?: boolean };
 
 	let userRoles: string[] = [];
-	if (c.env.DISCORD_GUILD_ID) {
-		const guildMemberResponse = await fetch(`https://discord.com/api/users/@me/guilds/${c.env.DISCORD_GUILD_ID}/member`, {
-			headers: { Authorization: `Bearer ${codePayload.discord_access_token}` },
-		});
+	if (c.env.DISCORD_GUILD_IDS) {
+		const guildIds = c.env.DISCORD_GUILD_IDS.split(',')
+			.map((id) => id.trim())
+			.filter((id) => id.length > 0);
+		if (guildIds.length > 0) {
+			const memberPromises = guildIds.map(async (guildId) => {
+				const res = await fetch(`https://discord.com/api/users/@me/guilds/${guildId}/member`, {
+					headers: { Authorization: `Bearer ${codePayload.discord_access_token}` },
+				});
+				if (res.ok) {
+					return (await res.json()) as { roles: string[] };
+				} else {
+					console.warn(
+						`Failed to fetch guild member roles for guild ${guildId} with status: ${res.status}`,
+						await res.text(),
+					);
+					return null;
+				}
+			});
 
-		if (guildMemberResponse.ok) {
-			const guildMember = (await guildMemberResponse.json()) as { roles: string[] };
-			userRoles = guildMember.roles;
-		} else {
-			console.warn(
-				`Failed to fetch guild member roles for guild ${c.env.DISCORD_GUILD_ID} with status: ${guildMemberResponse.status}`,
-				await guildMemberResponse.text(),
-			);
+			const memberResults = await Promise.all(memberPromises);
+			userRoles = memberResults
+				.filter((member): member is { roles: string[] } => member !== null)
+				.flatMap((member) => member.roles);
 		}
 	}
 
