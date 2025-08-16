@@ -320,18 +320,13 @@ app.post('/token', async (c) => {
 				if (res.ok) {
 					return (await res.json()) as { roles: string[] };
 				} else {
-					console.warn(
-						`Failed to fetch guild member roles for guild ${guildId} with status: ${res.status}`,
-						await res.text(),
-					);
+					console.warn(`Failed to fetch guild member roles for guild ${guildId} with status: ${res.status}`, await res.text());
 					return null;
 				}
 			});
 
 			const memberResults = await Promise.all(memberPromises);
-			userRoles = memberResults
-				.filter((member): member is { roles: string[] } => member !== null)
-				.flatMap((member) => member.roles);
+			userRoles = memberResults.filter((member): member is { roles: string[] } => member !== null).flatMap((member) => member.roles);
 		}
 	}
 
