@@ -321,7 +321,7 @@ app.post('/token', async (c) => {
 		// Generate ID token
 		const idToken = await generateToken(
 			{
-				name: user.username,
+				name: user.global_name || user.username,
 				picture: `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png`,
 				email: user.email,
 				email_verified: user.verified,
@@ -336,7 +336,7 @@ app.post('/token', async (c) => {
 		const accessToken = await generateToken(
 			{
 				// Include claims to be returned by userinfo
-				name: user.username,
+				name: user.global_name || user.username,
 				picture: `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png`,
 				email: user.email,
 				email_verified: user.verified,

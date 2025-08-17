@@ -15,6 +15,7 @@ export interface DiscordUser {
 	avatar: string;
 	email?: string;
 	verified?: boolean;
+	global_name?: string;
 }
 
 export async function exchangeCode(
@@ -23,16 +24,18 @@ export async function exchangeCode(
 	code: string,
 	redirectUri: string,
 ): Promise<DiscordTokenResponse> {
+	const body = new URLSearchParams({
+		client_id: clientId,
+		client_secret: clientSecret,
+		grant_type: 'authorization_code',
+		code: code,
+		redirect_uri: redirectUri,
+	});
+
 	const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-		body: new URLSearchParams({
-			client_id: clientId,
-			client_secret: clientSecret,
-			grant_type: 'authorization_code',
-			code: code,
-			redirect_uri: redirectUri,
-		}),
+		body: body.toString(),
 	});
 
 	if (!tokenResponse.ok) {
@@ -44,6 +47,7 @@ export async function exchangeCode(
 
 export async function getDiscordUser(accessToken: string): Promise<DiscordUser> {
 	const userResponse = await fetch('https://discord.com/api/users/@me', {
+		method: 'GET',
 		headers: { Authorization: `Bearer ${accessToken}` },
 	});
 
