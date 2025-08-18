@@ -1,9 +1,8 @@
 import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
-import { SignJWT, importJWK } from 'jose';
-import type { JWK, JWTPayload } from 'jose';
-import { exchangeCode, getDiscordUser, getDiscordUserRoles, DiscordAPIError } from './discord';
-import { type CodePayload, encodeState, decodeState, encodeCode, decodeCode } from './coder';
+import { type JWK, type JWTPayload, SignJWT, importJWK } from 'jose';
+import { type CodePayload, decodeCode, decodeState, encodeCode, encodeState } from './coder.js';
+import { DiscordAPIError, exchangeCode, getDiscordUser, getDiscordUserRoles } from './discord.js';
 
 interface TokenErrorResponse {
 	error: string;
