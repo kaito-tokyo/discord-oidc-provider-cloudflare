@@ -1,8 +1,9 @@
 import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
-import { SignJWT, jwtVerify, EncryptJWT, jwtDecrypt, importJWK } from 'jose';
-import type { JWK, JWTPayload } from 'jose';
-import { v7 as uuidv7 } from 'uuid';
+import { decodeBase64Url } from 'hono/utils/encode';
+import { type JWK, type JWTPayload, SignJWT, importJWK } from 'jose';
+import { type CodePayload, decodeCode, decodeState, encodeCode, encodeState } from './coder.js';
+import { DiscordAPIError, exchangeCode, getDiscordUser, getDiscordUserRoles } from './discord.js';
 
 interface TokenErrorResponse {
 	error: string;
@@ -15,29 +16,37 @@ interface OidcClient {
 	redirect_uris: string[];
 }
 
-const base64urlToUint8Array = (base64url: string): Uint8Array => {
-	const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/');
-	const bin = atob(base64);
-	const uint8Array = new Uint8Array(bin.length);
-	for (let i = 0; i < bin.length; i++) {
-		uint8Array[i] = bin.charCodeAt(i);
-	}
-	return uint8Array;
-};
+// /.well-known/openid-configuration
+interface OpenIDConfiguration {
+	issuer: string;
+	authorization_endpoint: string;
+	token_endpoint: string;
+	jwks_uri: string;
+	userinfo_endpoint: string;
+	response_types_supported: string[];
+	subject_types_supported: string[];
+	id_token_signing_alg_values_supported: string[];
+	scopes_supported: string[];
+	token_endpoint_auth_methods_supported: string[];
+	claims_supported: string[];
+	code_challenge_methods_supported: string[];
+}
+
+// /.well-known/jwks.json
+interface JWKS {
+	keys: JWK[];
+}
+
+// /token
+export interface TokenResponse {
+	access_token: string;
+	token_type: 'Bearer';
+	expires_in: number;
+	scope: string;
+	id_token: string;
+}
 
 const app = new Hono<{ Bindings: Env }>();
-
-const getPublicJwk = (privateJwk: JWK): JWK => {
-	return {
-		kty: privateJwk.kty,
-		crv: privateJwk.crv,
-		x: privateJwk.x,
-		y: privateJwk.y,
-		alg: 'ES256',
-		kid: privateJwk.kid,
-		use: 'sig',
-	};
-};
 
 // .well-known/openid-configuration
 app.get('/.well-known/openid-configuration', (c) => {
@@ -46,7 +55,7 @@ app.get('/.well-known/openid-configuration', (c) => {
 		issuer: issuer,
 		authorization_endpoint: `${issuer}/auth`,
 		token_endpoint: `${issuer}/token`,
-		jwks_uri: `${issuer}/jwks.json`,
+		jwks_uri: `${issuer}/.well-known/jwks.json`,
 		userinfo_endpoint: `${issuer}/userinfo`,
 		response_types_supported: ['code'],
 		subject_types_supported: ['public'],
@@ -55,15 +64,25 @@ app.get('/.well-known/openid-configuration', (c) => {
 		token_endpoint_auth_methods_supported: ['client_secret_post'],
 		claims_supported: ['sub', 'iss', 'aud', 'exp', 'iat', 'nonce', 'name', 'picture', 'email'],
 		code_challenge_methods_supported: ['S256'],
-	});
+	} satisfies OpenIDConfiguration);
 });
 
-// /jwks.json - Endpoint to expose the public key
-app.get('/jwks.json', (c) => {
+// /.well-known/jwks.json - Endpoint to expose the public key
+app.get('/.well-known/jwks.json', (c) => {
+	const getPublicJwk = (privateJwk: JWK): JWK => ({
+		kty: privateJwk.kty,
+		crv: privateJwk.crv,
+		x: privateJwk.x,
+		y: privateJwk.y,
+		alg: 'ES256',
+		kid: privateJwk.kid,
+		use: 'sig',
+	});
+
 	try {
 		const privateJwk = JSON.parse(c.env.JWT_PRIVATE_KEY) as JWK;
 		const publicJwk = getPublicJwk(privateJwk);
-		return c.json({ keys: [publicJwk] });
+		return c.json({ keys: [publicJwk] } satisfies JWKS);
 	} catch (e) {
 		console.error('Failed to parse JWT_PRIVATE_KEY or create public JWK:', e);
 		return c.json({ error: 'Internal Server Error' }, 500);
@@ -116,22 +135,20 @@ app.get('/auth', async (c) => {
 	}
 
 	// Pack the original request info into a JWT and pass it to Discord as state
-	const stateJwt = await new SignJWT({
-		jti: uuidv7(),
-		original_state: state,
-		redirect_uri: redirect_uri,
-		nonce: nonce,
-		scope: scope,
-		code_challenge: code_challenge,
-		code_challenge_method: code_challenge_method || 'S256',
-		client_id: client_id, // Add client_id to state
-	})
-		.setProtectedHeader({ alg: 'HS256' })
-		.setIssuedAt()
-		.setIssuer(new URL(c.req.url).origin)
-		.setAudience(c.env.DISCORD_CLIENT_ID)
-		.setExpirationTime('10m')
-		.sign(base64urlToUint8Array(c.env.STATE_SECRET));
+	const stateJwt = await encodeState(
+		{
+			original_state: state,
+			redirect_uri: redirect_uri,
+			nonce: nonce,
+			scope: scope,
+			code_challenge: code_challenge,
+			code_challenge_method: code_challenge_method || 'S256',
+			client_id: client_id,
+		},
+		decodeBase64Url(c.env.STATE_SECRET),
+		new URL(c.req.url).origin,
+		c.env.DISCORD_CLIENT_ID,
+	);
 
 	const discordAuthUrl = new URL('https://discord.com/api/oauth2/authorize');
 	discordAuthUrl.searchParams.set('client_id', c.env.DISCORD_CLIENT_ID);
@@ -152,58 +169,53 @@ app.get('/callback', async (c) => {
 	if (!state) throw new HTTPException(400, { message: 'state is required' });
 
 	// Verify the state (JWT)
-	const { payload: statePayload } = await jwtVerify(state, base64urlToUint8Array(c.env.STATE_SECRET), {
-		issuer: issuer,
-		audience: c.env.DISCORD_CLIENT_ID,
-	});
+	const statePayload = await decodeState(state, decodeBase64Url(c.env.STATE_SECRET), issuer, c.env.DISCORD_CLIENT_ID);
 
 	// Exchange the Discord authorization code for an access token
-	const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-		body: new URLSearchParams({
-			client_id: c.env.DISCORD_CLIENT_ID,
-			client_secret: c.env.DISCORD_CLIENT_SECRET,
-			grant_type: 'authorization_code',
-			code: code,
-			redirect_uri: new URL('/callback', c.req.url).toString(),
-		}),
-	});
-
-	if (!tokenResponse.ok) {
-		console.error(`Discord token exchange failed with status: ${tokenResponse.status}`, await tokenResponse.text());
-		throw new HTTPException(500, { message: 'Discord token exchange failed' });
+	let discordTokens;
+	try {
+		discordTokens = await exchangeCode(
+			c.env.DISCORD_CLIENT_ID,
+			c.env.DISCORD_CLIENT_SECRET,
+			code,
+			new URL('/callback', c.req.url).toString(),
+		);
+	} catch (e) {
+		if (e instanceof DiscordAPIError) {
+			throw new HTTPException(500, { message: e.message });
+		}
+		throw e;
 	}
-	const discordTokens = (await tokenResponse.json()) as { access_token: string };
+
+	const getCodePublicJwk = (privateJwk: JWK): JWK => ({
+		kty: privateJwk.kty,
+		crv: privateJwk.crv,
+		x: privateJwk.x,
+		y: privateJwk.y,
+		alg: 'ECDH-ES',
+		kid: privateJwk.kid,
+		use: 'enc',
+	});
 
 	// Encrypt the Discord access token etc. into a JWE to be used as the OIDC authorization code
 	const codePrivateJsonKey = JSON.parse(c.env.CODE_PRIVATE_KEY) as JWK;
-	const codePublicKey = await importJWK({
-		alg: codePrivateJsonKey.alg,
-		kty: codePrivateJsonKey.kty,
-		crv: codePrivateJsonKey.crv,
-		x: codePrivateJsonKey.x,
-		y: codePrivateJsonKey.y,
-	} satisfies JWK);
-
-	const oidcCode = await new EncryptJWT({
-		discord_access_token: discordTokens.access_token,
-		nonce: statePayload.nonce,
-		scope: statePayload.scope,
-		code_challenge: statePayload.code_challenge,
-		code_challenge_method: statePayload.code_challenge_method,
-	})
-		.setProtectedHeader({ alg: 'ECDH-ES', enc: 'A256GCM' })
-		.setIssuedAt()
-		.setIssuer(issuer)
-		.setAudience(statePayload.client_id as string) // Use client_id from state
-		.setExpirationTime('5m')
-		.encrypt(codePublicKey);
+	const oidcCode = await encodeCode(
+		{
+			discord_access_token: discordTokens.access_token,
+			nonce: statePayload.nonce,
+			scope: statePayload.scope,
+			code_challenge: statePayload.code_challenge,
+			code_challenge_method: statePayload.code_challenge_method,
+		},
+		getCodePublicJwk(codePrivateJsonKey),
+		issuer,
+		statePayload.client_id,
+	);
 
 	// Redirect to the original client
-	const finalRedirectUri = new URL(statePayload.redirect_uri as string);
+	const finalRedirectUri = new URL(statePayload.redirect_uri);
 	finalRedirectUri.searchParams.set('code', oidcCode);
-	finalRedirectUri.searchParams.set('state', statePayload.original_state as string);
+	finalRedirectUri.searchParams.set('state', statePayload.original_state);
 
 	return c.redirect(finalRedirectUri.toString());
 });
@@ -224,13 +236,10 @@ app.post('/token', async (c) => {
 	}
 
 	// Decrypt the authorization code (JWE) early to get codePayload
-	let codePayload;
+	let codePayload: CodePayload;
 	try {
-		const codePrivateKey = await importJWK(JSON.parse(c.env.CODE_PRIVATE_KEY) as JWK);
-		// Decrypt without audience verification first to get the client_id from the payload
-		const { payload: tempPayload } = await jwtDecrypt(body.code as string, codePrivateKey, {
-			issuer: issuer,
-		});
+		const codePrivateKey = JSON.parse(c.env.CODE_PRIVATE_KEY) as JWK;
+		const tempPayload = await decodeCode(body.code as string, codePrivateKey, issuer);
 
 		// Now verify the audience using the client_id from the request body if present,
 		// or fallback to the audience from the token.
@@ -296,89 +305,108 @@ app.post('/token', async (c) => {
 		}
 	}
 
-	// Fetch user information from Discord
-	const userResponse = await fetch('https://discord.com/api/users/@me', {
-		headers: { Authorization: `Bearer ${codePayload.discord_access_token}` },
-	});
+	try {
+		// Fetch user information from Discord
+		const user = await getDiscordUser(codePayload.discord_access_token as string);
 
-	if (!userResponse.ok) {
-		console.error(`Failed to fetch user from Discord with status: ${userResponse.status}`, await userResponse.text());
-		return c.json<TokenErrorResponse>({ error: 'server_error', error_description: 'Failed to fetch user from Discord' }, 500);
-	}
-	const user = (await userResponse.json()) as { id: string; username: string; avatar: string; email?: string; verified?: boolean };
-
-	let userRoles: string[] = [];
-	if (typeof c.env.DISCORD_GUILD_IDS === 'string' && c.env.DISCORD_GUILD_IDS.trim().length > 0) {
-		const guildIds = c.env.DISCORD_GUILD_IDS.split(',')
-			.map((id) => id.trim())
-			.filter((id) => id.length > 0);
-		if (guildIds.length > 0) {
-			const memberPromises = guildIds.map(async (guildId) => {
-				const res = await fetch(`https://discord.com/api/users/@me/guilds/${guildId}/member`, {
-					headers: { Authorization: `Bearer ${codePayload.discord_access_token}` },
-				});
-				if (res.ok) {
-					return (await res.json()) as { roles: string[] };
-				} else {
-					console.warn(`Failed to fetch guild member roles for guild ${guildId} with status: ${res.status}`, await res.text());
-					return null;
-				}
-			});
-
-			const memberResults = await Promise.all(memberPromises);
-			userRoles = memberResults.filter((member): member is { roles: string[] } => member !== null).flatMap((member) => member.roles);
+		let userRoles: string[] = [];
+		if (typeof c.env.DISCORD_GUILD_IDS === 'string' && c.env.DISCORD_GUILD_IDS.trim().length > 0) {
+			const guildIds = c.env.DISCORD_GUILD_IDS.split(',').map((id) => id.trim());
+			userRoles = await getDiscordUserRoles(codePayload.discord_access_token as string, guildIds);
 		}
-	}
 
-	const privateJwk = JSON.parse(c.env.JWT_PRIVATE_KEY) as JWK;
-	const privateKey = await importJWK(privateJwk, 'ES256');
+		const privateJwk = JSON.parse(c.env.JWT_PRIVATE_KEY) as JWK;
+		const privateKey = await importJWK(privateJwk, 'ES256');
 
-	const generateToken = async (payload: JWTPayload, audience: string, expiresIn: string) => {
-		return await new SignJWT({ ...payload, sub: user.id })
-			.setProtectedHeader({ alg: 'ES256', kid: privateJwk.kid, typ: 'JWT' })
-			.setIssuedAt()
-			.setIssuer(issuer)
-			.setAudience(audience)
-			.setSubject(user.id)
-			.setExpirationTime(expiresIn)
-			.sign(privateKey);
-	};
+		const generateToken = async (payload: JWTPayload, audience: string, expiresIn: string) => {
+			return await new SignJWT({ ...payload, sub: user.id })
+				.setProtectedHeader({ alg: 'ES256', kid: privateJwk.kid, typ: 'JWT' })
+				.setIssuedAt()
+				.setIssuer(issuer)
+				.setAudience(audience)
+				.setSubject(user.id)
+				.setExpirationTime(expiresIn)
+				.sign(privateKey);
+		};
 
-	// Generate ID token
-	const idToken = await generateToken(
-		{
-			name: user.username,
-			picture: `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png`,
-			email: user.email,
-			email_verified: user.verified,
-			nonce: codePayload.nonce as string,
-			roles: userRoles, // Add roles claim here
-		},
-		client_id,
-		'1h',
-	);
+		// Generate ID token
+		const idToken = await generateToken(
+			{
+				name: user.global_name || user.username,
+				picture: `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png`,
+				email: user.email,
+				email_verified: user.verified,
+				nonce: codePayload.nonce as string,
+				roles: userRoles, // Add roles claim here
+			},
+			client_id,
+			'1h',
+		);
 
-	// Generate access token for the UserInfo endpoint
-	const accessToken = await generateToken(
-		{
-			// Include claims to be returned by userinfo
-			name: user.username,
-			picture: `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png`,
-			email: user.email,
-			email_verified: user.verified,
+		// Generate access token for the UserInfo endpoint
+		const accessToken = await generateToken(
+			{
+				// Include claims to be returned by userinfo
+				name: user.global_name || user.username,
+				picture: `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png`,
+				email: user.email,
+				email_verified: user.verified,
+				scope: codePayload.scope,
+			},
+			issuer, // Audience is the provider itself (the userinfo endpoint)
+			'1h',
+		);
+
+		return c.json({
+			access_token: accessToken,
+			token_type: 'Bearer',
+			expires_in: 3600,
 			scope: codePayload.scope,
-		},
-		issuer, // Audience is the provider itself (the userinfo endpoint)
-		'1h',
-	);
-
-	return c.json({
-		access_token: accessToken,
-		token_type: 'Bearer',
-		expires_in: 3600,
-		scope: codePayload.scope,
-		id_token: idToken,
-	});
+			id_token: idToken,
+		} satisfies TokenResponse);
+	} catch (e) {
+		if (e instanceof DiscordAPIError) {
+			return c.json<TokenErrorResponse>({ error: 'server_error', error_description: e.message }, 500);
+		}
+		if (e instanceof HTTPException) {
+			return c.json<TokenErrorResponse>({ error: 'server_error', error_description: e.message }, e.status);
+		}
+		console.error(e);
+		return c.json<TokenErrorResponse>({ error: 'server_error', error_description: 'An unexpected error occurred' }, 500);
+	}
 });
 
 export default app;
+
+// /userinfo - UserInfo endpoint
+app.get('/userinfo', async (c) => {
+	const authHeader = c.req.header('Authorization');
+	if (!authHeader || !authHeader.startsWith('Bearer ')) {
+		throw new HTTPException(401, { message: 'Missing or invalid Authorization header' });
+	}
+	const token = authHeader.substring('Bearer '.length);
+
+	try {
+		const privateJwk = JSON.parse(c.env.JWT_PRIVATE_KEY) as JWK;
+		const publicKey = await importJWK(privateJwk, 'ES256');
+
+		const { payload } = await jwtVerify(token, publicKey, {
+			issuer: new URL(c.req.url).origin,
+			audience: new URL(c.req.url).origin,
+		});
+
+		// Construct the userinfo response from the token payload
+		const userinfo = {
+			sub: payload.sub,
+			name: payload.name,
+			picture: payload.picture,
+			email: payload.email,
+			email_verified: payload.email_verified,
+		};
+
+		return c.json(userinfo);
+	} catch (e) {
+		// This will catch errors from jwtVerify (e.g., invalid signature, expired token)
+		throw new HTTPException(401, { message: 'Invalid token' });
+	}
+});
