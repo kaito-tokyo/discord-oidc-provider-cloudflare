@@ -1,4 +1,3 @@
-import { decodeBase64Url } from 'hono/utils/encode';
 import { type JWK, type JWTPayload, EncryptJWT, SignJWT, importJWK, jwtDecrypt, jwtVerify } from 'jose';
 import { v7 as uuidv7 } from 'uuid';
 
@@ -12,7 +11,7 @@ export interface StatePayload extends JWTPayload {
 	client_id: string;
 }
 
-export const encodeState = async (payload: Omit<StatePayload, 'jti'>, secret: string, issuer: string, audience: string) => {
+export const encodeState = async (payload: Omit<StatePayload, 'jti'>, secret: Uint8Array, issuer: string, audience: string) => {
 	const stateJwt = await new SignJWT({
 		jti: uuidv7(),
 		...payload,
@@ -22,12 +21,12 @@ export const encodeState = async (payload: Omit<StatePayload, 'jti'>, secret: st
 		.setIssuer(issuer)
 		.setAudience(audience)
 		.setExpirationTime('10m')
-		.sign(decodeBase64Url(secret));
+		.sign(secret);
 	return stateJwt;
 };
 
-export const decodeState = async (token: string, secret: string, issuer: string, audience: string): Promise<StatePayload> => {
-	const { payload } = await jwtVerify(token, decodeBase64Url(secret), {
+export const decodeState = async (token: string, secret: Uint8Array, issuer: string, audience: string): Promise<StatePayload> => {
+	const { payload } = await jwtVerify(token, secret, {
 		issuer: issuer,
 		audience: audience,
 		algorithms: ['HS256'],

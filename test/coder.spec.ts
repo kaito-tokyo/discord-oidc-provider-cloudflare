@@ -1,9 +1,9 @@
-import { exportJWK, generateKeyPair, type JWK } from 'jose';
+import { EncryptJWT, SignJWT, exportJWK, generateKeyPair, importJWK, type JWK } from 'jose';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { type CodePayload, type StatePayload, decodeCode, decodeState, encodeCode, encodeState } from '../src/coder.js';
 
 describe('State', () => {
-	const secret = 'test-secret';
+	const secret = new TextEncoder().encode('test-secret');
 	const issuer = 'test-issuer';
 	const audience = 'test-audience';
 	const payload: Omit<StatePayload, 'jti'> = {
@@ -28,6 +28,19 @@ describe('State', () => {
 
 	it('should throw an error for an invalid state JWT', async () => {
 		await expect(decodeState('invalid-token', secret, issuer, audience)).rejects.toThrow();
+	});
+
+	it('should throw an error for a JWT with an invalid algorithm', async () => {
+		const token = await new SignJWT(payload)
+			.setProtectedHeader({ alg: 'HS512' })
+			.setIssuedAt()
+			.setIssuer(issuer)
+			.setAudience(audience)
+			.setExpirationTime('10m')
+			.sign(secret);
+		await expect(decodeState(token, secret, issuer, audience)).rejects.toThrow(
+			'"alg" (Algorithm) Header Parameter value not allowed',
+		);
 	});
 });
 
@@ -62,5 +75,19 @@ describe('Code', () => {
 
 	it('should throw an error for an invalid code JWE', async () => {
 		await expect(decodeCode('invalid-token', privateJwk, issuer)).rejects.toThrow();
+	});
+
+	it('should throw an error for a JWE with an invalid content encryption algorithm', async () => {
+		const codePublicKey = await importJWK(publicJwk);
+		const token = await new EncryptJWT(payload)
+			.setProtectedHeader({ alg: 'ECDH-ES', enc: 'A128GCM' })
+			.setIssuedAt()
+			.setIssuer(issuer)
+			.setAudience(audience)
+			.setExpirationTime('5m')
+			.encrypt(codePublicKey);
+		await expect(decodeCode(token, privateJwk, issuer)).rejects.toThrow(
+			'"enc" (Encryption Algorithm) Header Parameter value not allowed',
+		);
 	});
 });

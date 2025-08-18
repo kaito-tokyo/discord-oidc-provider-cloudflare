@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
+import { decodeBase64Url } from 'hono/utils/encode';
 import { type JWK, type JWTPayload, SignJWT, importJWK } from 'jose';
 import { type CodePayload, decodeCode, decodeState, encodeCode, encodeState } from './coder.js';
 import { DiscordAPIError, exchangeCode, getDiscordUser, getDiscordUserRoles } from './discord.js';
@@ -144,7 +145,7 @@ app.get('/auth', async (c) => {
 			code_challenge_method: code_challenge_method || 'S256',
 			client_id: client_id,
 		},
-		c.env.STATE_SECRET,
+		decodeBase64Url(c.env.STATE_SECRET),
 		new URL(c.req.url).origin,
 		c.env.DISCORD_CLIENT_ID,
 	);
@@ -168,7 +169,7 @@ app.get('/callback', async (c) => {
 	if (!state) throw new HTTPException(400, { message: 'state is required' });
 
 	// Verify the state (JWT)
-	const statePayload = await decodeState(state, c.env.STATE_SECRET, issuer, c.env.DISCORD_CLIENT_ID);
+	const statePayload = await decodeState(state, decodeBase64Url(c.env.STATE_SECRET), issuer, c.env.DISCORD_CLIENT_ID);
 
 	// Exchange the Discord authorization code for an access token
 	let discordTokens;
@@ -376,3 +377,37 @@ app.post('/token', async (c) => {
 });
 
 export default app;
+
+
+// /userinfo - UserInfo endpoint
+app.get('/userinfo', async (c) => {
+	const authHeader = c.req.header('Authorization');
+	if (!authHeader || !authHeader.startsWith('Bearer ')) {
+		throw new HTTPException(401, { message: 'Missing or invalid Authorization header' });
+	}
+	const token = authHeader.substring('Bearer '.length);
+
+	try {
+		const privateJwk = JSON.parse(c.env.JWT_PRIVATE_KEY) as JWK;
+		const publicKey = await importJWK(privateJwk, 'ES256');
+
+		const { payload } = await jwtVerify(token, publicKey, {
+			issuer: new URL(c.req.url).origin,
+			audience: new URL(c.req.url).origin,
+		});
+
+		// Construct the userinfo response from the token payload
+		const userinfo = {
+			sub: payload.sub,
+			name: payload.name,
+			picture: payload.picture,
+			email: payload.email,
+			email_verified: payload.email_verified,
+		};
+
+		return c.json(userinfo);
+	} catch (e) {
+		// This will catch errors from jwtVerify (e.g., invalid signature, expired token)
+		throw new HTTPException(401, { message: 'Invalid token' });
+	}
+});
