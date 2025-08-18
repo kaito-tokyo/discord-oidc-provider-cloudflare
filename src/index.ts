@@ -1,10 +1,9 @@
 import { Hono } from 'hono';
-import { decodeBase64Url } from 'hono/utils/encode';
 import { HTTPException } from 'hono/http-exception';
-import { SignJWT, jwtVerify, EncryptJWT, jwtDecrypt, importJWK } from 'jose';
+import { SignJWT, importJWK } from 'jose';
 import type { JWK, JWTPayload } from 'jose';
-import { v7 as uuidv7 } from 'uuid';
 import { exchangeCode, getDiscordUser, getDiscordUserRoles, DiscordAPIError } from './discord';
+import { encodeState, decodeState, encodeCode, decodeCode } from './coder';
 
 interface TokenErrorResponse {
 	error: string;
@@ -39,7 +38,7 @@ interface JWKS {
 }
 
 // /token
-interface TokenResponse {
+export interface TokenResponse {
 	access_token: string;
 	token_type: 'Bearer';
 	expires_in: number;
@@ -138,22 +137,18 @@ app.get('/auth', async (c) => {
 	}
 
 	// Pack the original request info into a JWT and pass it to Discord as state
-	const stateJwt = await new SignJWT({
-		jti: uuidv7(),
-		original_state: state,
-		redirect_uri: redirect_uri,
-		nonce: nonce,
-		scope: scope,
-		code_challenge: code_challenge,
-		code_challenge_method: code_challenge_method || 'S256',
-		client_id: client_id, // Add client_id to state
-	})
-		.setProtectedHeader({ alg: 'HS256' })
-		.setIssuedAt()
-		.setIssuer(new URL(c.req.url).origin)
-		.setAudience(c.env.DISCORD_CLIENT_ID)
-		.setExpirationTime('10m')
-		.sign(decodeBase64Url(c.env.STATE_SECRET));
+	const stateJwt = await encodeState(
+		state,
+		redirect_uri,
+		nonce,
+		scope,
+		code_challenge,
+		code_challenge_method,
+		client_id,
+		c.env.STATE_SECRET,
+		new URL(c.req.url).origin,
+		c.env.DISCORD_CLIENT_ID,
+	);
 
 	const discordAuthUrl = new URL('https://discord.com/api/oauth2/authorize');
 	discordAuthUrl.searchParams.set('client_id', c.env.DISCORD_CLIENT_ID);
@@ -174,10 +169,7 @@ app.get('/callback', async (c) => {
 	if (!state) throw new HTTPException(400, { message: 'state is required' });
 
 	// Verify the state (JWT)
-	const { payload: statePayload } = await jwtVerify(state, decodeBase64Url(c.env.STATE_SECRET), {
-		issuer: issuer,
-		audience: c.env.DISCORD_CLIENT_ID,
-	});
+	const statePayload = await decodeState(state, c.env.STATE_SECRET, issuer, c.env.DISCORD_CLIENT_ID);
 
 	// Exchange the Discord authorization code for an access token
 	let discordTokens;
@@ -197,27 +189,16 @@ app.get('/callback', async (c) => {
 
 	// Encrypt the Discord access token etc. into a JWE to be used as the OIDC authorization code
 	const codePrivateJsonKey = JSON.parse(c.env.CODE_PRIVATE_KEY) as JWK;
-	const codePublicKey = await importJWK({
-		alg: codePrivateJsonKey.alg,
-		kty: codePrivateJsonKey.kty,
-		crv: codePrivateJsonKey.crv,
-		x: codePrivateJsonKey.x,
-		y: codePrivateJsonKey.y,
-	} satisfies JWK);
-
-	const oidcCode = await new EncryptJWT({
-		discord_access_token: discordTokens.access_token,
-		nonce: statePayload.nonce,
-		scope: statePayload.scope,
-		code_challenge: statePayload.code_challenge,
-		code_challenge_method: statePayload.code_challenge_method,
-	})
-		.setProtectedHeader({ alg: 'ECDH-ES', enc: 'A256GCM' })
-		.setIssuedAt()
-		.setIssuer(issuer)
-		.setAudience(statePayload.client_id as string) // Use client_id from state
-		.setExpirationTime('5m')
-		.encrypt(codePublicKey);
+	const oidcCode = await encodeCode(
+		discordTokens.access_token,
+		statePayload.nonce,
+		statePayload.scope,
+		statePayload.code_challenge,
+		statePayload.code_challenge_method,
+		codePrivateJsonKey,
+		issuer,
+		statePayload.client_id as string,
+	);
 
 	// Redirect to the original client
 	const finalRedirectUri = new URL(statePayload.redirect_uri as string);
@@ -245,11 +226,8 @@ app.post('/token', async (c) => {
 	// Decrypt the authorization code (JWE) early to get codePayload
 	let codePayload;
 	try {
-		const codePrivateKey = await importJWK(JSON.parse(c.env.CODE_PRIVATE_KEY) as JWK);
-		// Decrypt without audience verification first to get the client_id from the payload
-		const { payload: tempPayload } = await jwtDecrypt(body.code as string, codePrivateKey, {
-			issuer: issuer,
-		});
+		const codePrivateKey = JSON.parse(c.env.CODE_PRIVATE_KEY) as JWK;
+		const tempPayload = await decodeCode(body.code as string, codePrivateKey, issuer);
 
 		// Now verify the audience using the client_id from the request body if present,
 		// or fallback to the audience from the token.
