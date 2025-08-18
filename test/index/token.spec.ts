@@ -4,10 +4,9 @@ import { EncryptJWT, importJWK, jwtVerify } from 'jose';
 import { TextEncoder } from 'util';
 import wranglerJson from '../../wrangler.json';
 import { setUpOidcClients, TEST_OIDC_CLIENT_ID, TEST_OIDC_CLIENT_SECRET } from '../test_helpers';
-import * as discord from '../../src/discord';
-import { DiscordAPIError } from '../../src/discord';
-
-
+import * as discord from '../../src/discord.js';
+import { DiscordAPIError } from '../../src/discord.js';
+import type { TokenResponse } from '../../src/index.js'
 
 // Helper to generate a code_challenge from a code_verifier
 const generateCodeChallenge = async (codeVerifier: string): Promise<string> => {
@@ -72,7 +71,7 @@ describe('/token endpoint', () => {
 		});
 
 		expect(response.status).toBe(200);
-		const body = await response.json();
+		const body = (await response.json()) as TokenResponse;
 
 		expect(body.access_token).toBeDefined();
 		expect(body.token_type).toBe('Bearer');
@@ -136,7 +135,7 @@ describe('/token endpoint', () => {
 		});
 
 		expect(response.status).toBe(200);
-		const body = await response.json();
+		const body = (await response.json()) as TokenResponse;
 
 		expect(body.access_token).toBeDefined();
 		expect(body.token_type).toBe('Bearer');
@@ -271,7 +270,7 @@ describe('/token endpoint', () => {
 		});
 
 		expect(response.status).toBe(200);
-		const body = await response.json();
+		const body = (await response.json()) as TokenResponse;
 
 		expect(body.access_token).toBeDefined();
 		expect(body.token_type).toBe('Bearer');
