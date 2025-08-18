@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { decodeBase64Url } from 'hono/utils/encode';
 import { HTTPException } from 'hono/http-exception';
 import { SignJWT, jwtVerify, EncryptJWT, jwtDecrypt, importJWK } from 'jose';
 import type { JWK, JWTPayload } from 'jose';
@@ -15,16 +16,6 @@ interface OidcClient {
 	client_secret_hash: string;
 	redirect_uris: string[];
 }
-
-const base64urlToUint8Array = (base64url: string): Uint8Array => {
-	const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/');
-	const bin = atob(base64);
-	const uint8Array = new Uint8Array(bin.length);
-	for (let i = 0; i < bin.length; i++) {
-		uint8Array[i] = bin.charCodeAt(i);
-	}
-	return uint8Array;
-};
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -132,7 +123,7 @@ app.get('/auth', async (c) => {
 		.setIssuer(new URL(c.req.url).origin)
 		.setAudience(c.env.DISCORD_CLIENT_ID)
 		.setExpirationTime('10m')
-		.sign(base64urlToUint8Array(c.env.STATE_SECRET));
+		.sign(decodeBase64Url(c.env.STATE_SECRET));
 
 	const discordAuthUrl = new URL('https://discord.com/api/oauth2/authorize');
 	discordAuthUrl.searchParams.set('client_id', c.env.DISCORD_CLIENT_ID);
@@ -153,7 +144,7 @@ app.get('/callback', async (c) => {
 	if (!state) throw new HTTPException(400, { message: 'state is required' });
 
 	// Verify the state (JWT)
-	const { payload: statePayload } = await jwtVerify(state, base64urlToUint8Array(c.env.STATE_SECRET), {
+	const { payload: statePayload } = await jwtVerify(state, decodeBase64Url(c.env.STATE_SECRET), {
 		issuer: issuer,
 		audience: c.env.DISCORD_CLIENT_ID,
 	});
