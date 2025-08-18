@@ -1,6 +1,6 @@
 import { SELF } from 'cloudflare:test';
 import { describe, it, expect, beforeEach } from 'vitest';
-import wranglerJson from '../wrangler.json';
+import wranglerJson from '../../wrangler.json';
 import { setUpOidcClients, TEST_OIDC_CLIENT_ID, TEST_OIDC_REDIRECT_URI } from './test_helpers.js';
 
 describe('/auth', () => {

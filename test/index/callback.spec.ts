@@ -1,7 +1,7 @@
 import { SELF } from 'cloudflare:test';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SignJWT, jwtDecrypt, importJWK } from 'jose';
-import wranglerJson from '../wrangler.json';
+import wranglerJson from '../../wrangler.json';
 import { setUpOidcClients, TEST_OIDC_CLIENT_ID, TEST_OIDC_REDIRECT_URI } from './test_helpers';
 
 // Helper to convert base64url to Uint8Array
