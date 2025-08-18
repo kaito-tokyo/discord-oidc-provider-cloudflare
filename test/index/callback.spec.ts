@@ -3,7 +3,7 @@ import { decodeBase64Url } from 'hono/utils/encode';
 import { importJWK, jwtDecrypt, SignJWT } from 'jose';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import wranglerJson from '../../wrangler.json';
-import { setUpOidcClients, TEST_OIDC_CLIENT_ID, TEST_OIDC_REDIRECT_URI } from '../test_helpers';
+import { setUpOidcClients, TEST_OIDC_CLIENT_ID, TEST_OIDC_REDIRECT_URI } from '../test_helpers.js';
 
 describe('/callback endpoint', () => {
 	const { STATE_SECRET, DISCORD_CLIENT_ID, CODE_PRIVATE_KEY } = wranglerJson.env.test.vars;

@@ -1,5 +1,5 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
-import { DiscordAPIError, exchangeCode, getDiscordUser, getDiscordUserRoles } from '../src/discord';
+import { DiscordAPIError, exchangeCode, getDiscordUser, getDiscordUserRoles } from '../src/discord.js';
 
 afterEach(() => {
 	vi.restoreAllMocks();

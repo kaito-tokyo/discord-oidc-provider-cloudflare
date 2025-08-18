@@ -1,6 +1,6 @@
 import { exportJWK, generateKeyPair, type JWK } from 'jose';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { type CodePayload, type StatePayload, decodeCode, decodeState, encodeCode, encodeState } from '../src/coder';
+import { type CodePayload, type StatePayload, decodeCode, decodeState, encodeCode, encodeState } from '../src/coder.js';
 
 describe('State', () => {
 	const secret = 'test-secret';
