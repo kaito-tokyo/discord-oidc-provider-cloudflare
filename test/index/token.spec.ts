@@ -6,7 +6,7 @@ import wranglerJson from '../../wrangler.json';
 import { setUpOidcClients, TEST_OIDC_CLIENT_ID, TEST_OIDC_CLIENT_SECRET } from '../test_helpers';
 import * as discord from '../../src/discord.js';
 import { DiscordAPIError } from '../../src/discord.js';
-import type { TokenResponse } from '../../src/index.js'
+import type { TokenResponse } from '../../src/index.js';
 
 // Helper to generate a code_challenge from a code_verifier
 const generateCodeChallenge = async (codeVerifier: string): Promise<string> => {
@@ -396,7 +396,7 @@ describe('/token endpoint', () => {
 		expect(await response.json()).toEqual({ error: 'invalid_grant', error_description: 'invalid code_verifier' });
 	});
 
-		it('should return 500 if Discord user info fetch fails', async () => {
+	it('should return 500 if Discord user info fetch fails', async () => {
 		const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 		vi.spyOn(discord, 'getDiscordUser').mockRejectedValue(new DiscordAPIError('Failed to fetch user from Discord'));
 

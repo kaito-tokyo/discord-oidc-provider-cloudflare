@@ -33,9 +33,9 @@ describe('exchangeCode', () => {
 			return new Response('error', { status: 400 });
 		});
 
-		await expect(
-			exchangeCode('test-client-id', 'test-client-secret', 'test-code', 'http://localhost/callback'),
-		).rejects.toThrow(DiscordAPIError);
+		await expect(exchangeCode('test-client-id', 'test-client-secret', 'test-code', 'http://localhost/callback')).rejects.toThrow(
+			DiscordAPIError,
+		);
 		expect(fetchSpy).toHaveBeenCalledTimes(1);
 	});
 });

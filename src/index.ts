@@ -3,7 +3,7 @@ import { HTTPException } from 'hono/http-exception';
 import { SignJWT, importJWK } from 'jose';
 import type { JWK, JWTPayload } from 'jose';
 import { exchangeCode, getDiscordUser, getDiscordUserRoles, DiscordAPIError } from './discord';
-import { type StatePayload, type CodePayload, encodeState, decodeState, encodeCode, decodeCode } from './coder';
+import { type CodePayload, encodeState, decodeState, encodeCode, decodeCode } from './coder';
 
 interface TokenErrorResponse {
 	error: string;
@@ -48,30 +48,6 @@ export interface TokenResponse {
 
 const app = new Hono<{ Bindings: Env }>();
 
-const getPublicJwk = (privateJwk: JWK): JWK => {
-	return {
-		kty: privateJwk.kty,
-		crv: privateJwk.crv,
-		x: privateJwk.x,
-		y: privateJwk.y,
-		alg: 'ES256',
-		kid: privateJwk.kid,
-		use: 'sig',
-	};
-};
-
-const getCodePublicJwk = (privateJwk: JWK): JWK => {
-	return {
-		kty: privateJwk.kty,
-		crv: privateJwk.crv,
-		x: privateJwk.x,
-		y: privateJwk.y,
-		alg: 'ECDH-ES',
-		kid: privateJwk.kid,
-		use: 'enc',
-	};
-};
-
 // .well-known/openid-configuration
 app.get('/.well-known/openid-configuration', (c) => {
 	const issuer = new URL(c.req.url).origin;
@@ -93,6 +69,16 @@ app.get('/.well-known/openid-configuration', (c) => {
 
 // /.well-known/jwks.json - Endpoint to expose the public key
 app.get('/.well-known/jwks.json', (c) => {
+	const getPublicJwk = (privateJwk: JWK): JWK => ({
+		kty: privateJwk.kty,
+		crv: privateJwk.crv,
+		x: privateJwk.x,
+		y: privateJwk.y,
+		alg: 'ES256',
+		kid: privateJwk.kid,
+		use: 'sig',
+	});
+
 	try {
 		const privateJwk = JSON.parse(c.env.JWT_PRIVATE_KEY) as JWK;
 		const publicJwk = getPublicJwk(privateJwk);
@@ -200,6 +186,16 @@ app.get('/callback', async (c) => {
 		}
 		throw e;
 	}
+
+	const getCodePublicJwk = (privateJwk: JWK): JWK => ({
+		kty: privateJwk.kty,
+		crv: privateJwk.crv,
+		x: privateJwk.x,
+		y: privateJwk.y,
+		alg: 'ECDH-ES',
+		kid: privateJwk.kid,
+		use: 'enc',
+	});
 
 	// Encrypt the Discord access token etc. into a JWE to be used as the OIDC authorization code
 	const codePrivateJsonKey = JSON.parse(c.env.CODE_PRIVATE_KEY) as JWK;
