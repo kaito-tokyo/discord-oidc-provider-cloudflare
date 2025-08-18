@@ -30,6 +30,7 @@ export const decodeState = async (token: string, secret: string, issuer: string,
 	const { payload } = await jwtVerify(token, decodeBase64Url(secret), {
 		issuer: issuer,
 		audience: audience,
+		algorithms: ['HS256'],
 	});
 	return payload as StatePayload;
 };
@@ -58,6 +59,8 @@ export const decodeCode = async (token: string, privateJwk: JWK, issuer: string)
 	const codePrivateKey = await importJWK(privateJwk);
 	const { payload } = await jwtDecrypt(token, codePrivateKey, {
 		issuer: issuer,
+		keyManagementAlgorithms: ['ECDH-ES'],
+		contentEncryptionAlgorithms: ['A256GCM'],
 	});
 	return payload as CodePayload;
 };
