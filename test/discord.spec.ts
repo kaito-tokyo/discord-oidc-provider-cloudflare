@@ -29,7 +29,7 @@ describe('exchangeCode', () => {
 	});
 
 	it('should throw DiscordAPIError on failed exchange', async () => {
-		const fetchSpy = vi.spyOn(global, 'fetch').mockImplementation(async (url, options) => {
+		const fetchSpy = vi.spyOn(global, 'fetch').mockImplementation(async (_url, _options) => {
 			return new Response('error', { status: 400 });
 		});
 
@@ -74,7 +74,7 @@ describe('getDiscordUser', () => {
 	});
 
 	it('should throw DiscordAPIError on failed user fetch', async () => {
-		const fetchSpy = vi.spyOn(global, 'fetch').mockImplementation(async (url, options) => {
+		const fetchSpy = vi.spyOn(global, 'fetch').mockImplementation(async (_url, _options) => {
 			return new Response('unauthorized', { status: 401 });
 		});
 
@@ -88,7 +88,7 @@ describe('getDiscordUserRoles', () => {
 		vi.spyOn(console, 'error').mockImplementation(() => {});
 	});
 	it('should get user roles from multiple guilds', async () => {
-		const fetchSpy = vi.spyOn(global, 'fetch').mockImplementation(async (url, options) => {
+		const fetchSpy = vi.spyOn(global, 'fetch').mockImplementation(async (url, _options) => {
 			if (url === 'https://discord.com/api/users/@me/guilds/guild1/member') {
 				return new Response(JSON.stringify({ roles: ['role1', 'role2'] }), {
 					status: 200,
@@ -110,7 +110,7 @@ describe('getDiscordUserRoles', () => {
 	});
 
 	it('should throw DiscordAPIError if one of the guild fetches fails', async () => {
-		const fetchSpy = vi.spyOn(global, 'fetch').mockImplementation(async (url, options) => {
+		const fetchSpy = vi.spyOn(global, 'fetch').mockImplementation(async (url, _options) => {
 			if (url === 'https://discord.com/api/users/@me/guilds/guild1/member') {
 				return new Response(JSON.stringify({ roles: ['role1', 'role2'] }), {
 					status: 200,
@@ -128,7 +128,7 @@ describe('getDiscordUserRoles', () => {
 	});
 
 	it('should throw DiscordAPIError for a user not in a guild', async () => {
-		const fetchSpy = vi.spyOn(global, 'fetch').mockImplementation(async (url, options) => {
+		const fetchSpy = vi.spyOn(global, 'fetch').mockImplementation(async (_url, _options) => {
 			return new Response('not found', { status: 404 });
 		});
 
