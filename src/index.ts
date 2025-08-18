@@ -3,7 +3,7 @@ import { HTTPException } from 'hono/http-exception';
 import { SignJWT, importJWK } from 'jose';
 import type { JWK, JWTPayload } from 'jose';
 import { exchangeCode, getDiscordUser, getDiscordUserRoles, DiscordAPIError } from './discord';
-import { encodeState, decodeState, encodeCode, decodeCode } from './coder';
+import { type StatePayload, type CodePayload, encodeState, decodeState, encodeCode, decodeCode } from './coder';
 
 interface TokenErrorResponse {
 	error: string;
@@ -57,6 +57,18 @@ const getPublicJwk = (privateJwk: JWK): JWK => {
 		alg: 'ES256',
 		kid: privateJwk.kid,
 		use: 'sig',
+	};
+};
+
+const getCodePublicJwk = (privateJwk: JWK): JWK => {
+	return {
+		kty: privateJwk.kty,
+		crv: privateJwk.crv,
+		x: privateJwk.x,
+		y: privateJwk.y,
+		alg: 'ECDH-ES',
+		kid: privateJwk.kid,
+		use: 'enc',
 	};
 };
 
@@ -138,13 +150,15 @@ app.get('/auth', async (c) => {
 
 	// Pack the original request info into a JWT and pass it to Discord as state
 	const stateJwt = await encodeState(
-		state,
-		redirect_uri,
-		nonce,
-		scope,
-		code_challenge,
-		code_challenge_method,
-		client_id,
+		{
+			original_state: state,
+			redirect_uri: redirect_uri,
+			nonce: nonce,
+			scope: scope,
+			code_challenge: code_challenge,
+			code_challenge_method: code_challenge_method || 'S256',
+			client_id: client_id,
+		},
 		c.env.STATE_SECRET,
 		new URL(c.req.url).origin,
 		c.env.DISCORD_CLIENT_ID,
@@ -190,20 +204,22 @@ app.get('/callback', async (c) => {
 	// Encrypt the Discord access token etc. into a JWE to be used as the OIDC authorization code
 	const codePrivateJsonKey = JSON.parse(c.env.CODE_PRIVATE_KEY) as JWK;
 	const oidcCode = await encodeCode(
-		discordTokens.access_token,
-		statePayload.nonce,
-		statePayload.scope,
-		statePayload.code_challenge,
-		statePayload.code_challenge_method,
-		codePrivateJsonKey,
+		{
+			discord_access_token: discordTokens.access_token,
+			nonce: statePayload.nonce,
+			scope: statePayload.scope,
+			code_challenge: statePayload.code_challenge,
+			code_challenge_method: statePayload.code_challenge_method,
+		},
+		getCodePublicJwk(codePrivateJsonKey),
 		issuer,
-		statePayload.client_id as string,
+		statePayload.client_id,
 	);
 
 	// Redirect to the original client
-	const finalRedirectUri = new URL(statePayload.redirect_uri as string);
+	const finalRedirectUri = new URL(statePayload.redirect_uri);
 	finalRedirectUri.searchParams.set('code', oidcCode);
-	finalRedirectUri.searchParams.set('state', statePayload.original_state as string);
+	finalRedirectUri.searchParams.set('state', statePayload.original_state);
 
 	return c.redirect(finalRedirectUri.toString());
 });
@@ -224,7 +240,7 @@ app.post('/token', async (c) => {
 	}
 
 	// Decrypt the authorization code (JWE) early to get codePayload
-	let codePayload;
+	let codePayload: CodePayload;
 	try {
 		const codePrivateKey = JSON.parse(c.env.CODE_PRIVATE_KEY) as JWK;
 		const tempPayload = await decodeCode(body.code as string, codePrivateKey, issuer);
