@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
-import { decodeBase64Url } from 'hono/utils/encode';
+import { decodeBase64 } from 'hono/utils/encode';
 import { type JWK, type JWTPayload, SignJWT, importJWK } from 'jose';
 import { type CodePayload, decodeCode, decodeState, encodeCode, encodeState } from './coder.js';
 import { DiscordAPIError, exchangeCode, getDiscordUser, getDiscordUserRoles } from './discord.js';
@@ -145,7 +145,7 @@ app.get('/auth', async (c) => {
 			code_challenge_method: code_challenge_method || 'S256',
 			client_id: client_id,
 		},
-		decodeBase64Url(c.env.STATE_SECRET),
+		decodeBase64(c.env.STATE_SECRET),
 		new URL(c.req.url).origin,
 		c.env.DISCORD_CLIENT_ID,
 	);
@@ -169,7 +169,7 @@ app.get('/callback', async (c) => {
 	if (!state) throw new HTTPException(400, { message: 'state is required' });
 
 	// Verify the state (JWT)
-	const statePayload = await decodeState(state, decodeBase64Url(c.env.STATE_SECRET), issuer, c.env.DISCORD_CLIENT_ID);
+	const statePayload = await decodeState(state, decodeBase64(c.env.STATE_SECRET), issuer, c.env.DISCORD_CLIENT_ID);
 
 	// Exchange the Discord authorization code for an access token
 	let discordTokens;
