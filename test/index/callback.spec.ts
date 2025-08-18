@@ -1,7 +1,7 @@
 import { SELF } from 'cloudflare:test';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { SignJWT, jwtDecrypt, importJWK } from 'jose';
 import { decodeBase64Url } from 'hono/utils/encode';
+import { importJWK, jwtDecrypt, SignJWT } from 'jose';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import wranglerJson from '../../wrangler.json';
 import { setUpOidcClients, TEST_OIDC_CLIENT_ID, TEST_OIDC_REDIRECT_URI } from '../test_helpers';
 

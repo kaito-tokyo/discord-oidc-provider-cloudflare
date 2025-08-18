@@ -1,6 +1,5 @@
 import { decodeBase64Url } from 'hono/utils/encode';
-import { SignJWT, jwtVerify, EncryptJWT, jwtDecrypt, importJWK } from 'jose';
-import type { JWK, JWTPayload } from 'jose';
+import { type JWK, type JWTPayload, EncryptJWT, SignJWT, importJWK, jwtDecrypt, jwtVerify } from 'jose';
 import { v7 as uuidv7 } from 'uuid';
 
 export interface StatePayload extends JWTPayload {

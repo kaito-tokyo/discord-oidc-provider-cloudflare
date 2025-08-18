@@ -1,12 +1,12 @@
 import { SELF } from 'cloudflare:test';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EncryptJWT, importJWK, jwtVerify } from 'jose';
 import { TextEncoder } from 'util';
-import wranglerJson from '../../wrangler.json';
-import { setUpOidcClients, TEST_OIDC_CLIENT_ID, TEST_OIDC_CLIENT_SECRET } from '../test_helpers';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as discord from '../../src/discord.js';
 import { DiscordAPIError } from '../../src/discord.js';
 import type { TokenResponse } from '../../src/index.js';
+import wranglerJson from '../../wrangler.json';
+import { setUpOidcClients, TEST_OIDC_CLIENT_ID, TEST_OIDC_CLIENT_SECRET } from '../test_helpers';
 
 // Helper to generate a code_challenge from a code_verifier
 const generateCodeChallenge = async (codeVerifier: string): Promise<string> => {
