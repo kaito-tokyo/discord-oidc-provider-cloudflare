@@ -17,6 +17,36 @@ interface OidcClient {
 	redirect_uris: string[];
 }
 
+// /.well-known/openid-configuration
+interface OpenIDConfiguration {
+	issuer: string;
+	authorization_endpoint: string;
+	token_endpoint: string;
+	jwks_uri: string;
+	userinfo_endpoint: string;
+	response_types_supported: string[];
+	subject_types_supported: string[];
+	id_token_signing_alg_values_supported: string[];
+	scopes_supported: string[];
+	token_endpoint_auth_methods_supported: string[];
+	claims_supported: string[];
+	code_challenge_methods_supported: string[];
+}
+
+// /.well-known/jwks.json
+interface JWKS {
+	keys: JWK[];
+}
+
+// /token
+interface TokenResponse {
+	access_token: string;
+	token_type: 'Bearer';
+	expires_in: number;
+	scope: string;
+	id_token: string;
+}
+
 const app = new Hono<{ Bindings: Env }>();
 
 const getPublicJwk = (privateJwk: JWK): JWK => {
@@ -38,7 +68,7 @@ app.get('/.well-known/openid-configuration', (c) => {
 		issuer: issuer,
 		authorization_endpoint: `${issuer}/auth`,
 		token_endpoint: `${issuer}/token`,
-		jwks_uri: `${issuer}/jwks.json`,
+		jwks_uri: `${issuer}/.well-known/jwks.json`,
 		userinfo_endpoint: `${issuer}/userinfo`,
 		response_types_supported: ['code'],
 		subject_types_supported: ['public'],
@@ -47,15 +77,15 @@ app.get('/.well-known/openid-configuration', (c) => {
 		token_endpoint_auth_methods_supported: ['client_secret_post'],
 		claims_supported: ['sub', 'iss', 'aud', 'exp', 'iat', 'nonce', 'name', 'picture', 'email'],
 		code_challenge_methods_supported: ['S256'],
-	});
+	} satisfies OpenIDConfiguration);
 });
 
-// /jwks.json - Endpoint to expose the public key
-app.get('/jwks.json', (c) => {
+// /.well-known/jwks.json - Endpoint to expose the public key
+app.get('/.well-known/jwks.json', (c) => {
 	try {
 		const privateJwk = JSON.parse(c.env.JWT_PRIVATE_KEY) as JWK;
 		const publicJwk = getPublicJwk(privateJwk);
-		return c.json({ keys: [publicJwk] });
+		return c.json({ keys: [publicJwk] } satisfies JWKS);
 	} catch (e) {
 		console.error('Failed to parse JWT_PRIVATE_KEY or create public JWK:', e);
 		return c.json({ error: 'Internal Server Error' }, 500);
@@ -343,7 +373,7 @@ app.post('/token', async (c) => {
 			expires_in: 3600,
 			scope: codePayload.scope,
 			id_token: idToken,
-		});
+		} satisfies TokenResponse);
 	} catch (e) {
 		if (e instanceof DiscordAPIError) {
 			return c.json<TokenErrorResponse>({ error: 'server_error', error_description: e.message }, 500);

@@ -1,19 +1,9 @@
 import { SELF } from 'cloudflare:test';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SignJWT, jwtDecrypt, importJWK } from 'jose';
+import { decodeBase64Url } from 'hono/utils/encode';
 import wranglerJson from '../../wrangler.json';
 import { setUpOidcClients, TEST_OIDC_CLIENT_ID, TEST_OIDC_REDIRECT_URI } from '../test_helpers';
-
-// Helper to convert base64url to Uint8Array
-const base64urlToUint8Array = (base64url: string): Uint8Array => {
-	const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/');
-	const bin = atob(base64);
-	const uint8Array = new Uint8Array(bin.length);
-	for (let i = 0; i < bin.length; i++) {
-		uint8Array[i] = bin.charCodeAt(i);
-	}
-	return uint8Array;
-};
 
 describe('/callback endpoint', () => {
 	const { STATE_SECRET, DISCORD_CLIENT_ID, CODE_PRIVATE_KEY } = wranglerJson.env.test.vars;
@@ -57,7 +47,7 @@ describe('/callback endpoint', () => {
 			.setIssuer('http://localhost')
 			.setAudience(DISCORD_CLIENT_ID)
 			.setExpirationTime('10m')
-			.sign(base64urlToUint8Array(STATE_SECRET));
+			.sign(decodeBase64Url(STATE_SECRET));
 
 		const discordAuthCode = 'discord_auth_code';
 
@@ -141,7 +131,7 @@ describe('/callback endpoint', () => {
 			.setIssuer('http://localhost')
 			.setAudience(DISCORD_CLIENT_ID)
 			.setExpirationTime('10m')
-			.sign(base64urlToUint8Array(STATE_SECRET));
+			.sign(decodeBase64Url(STATE_SECRET));
 
 		const discordAuthCode = 'discord_auth_code';
 

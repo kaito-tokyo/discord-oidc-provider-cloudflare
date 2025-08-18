@@ -4,6 +4,10 @@ import { EncryptJWT, importJWK, jwtVerify } from 'jose';
 import { TextEncoder } from 'util';
 import wranglerJson from '../../wrangler.json';
 import { setUpOidcClients, TEST_OIDC_CLIENT_ID, TEST_OIDC_CLIENT_SECRET } from '../test_helpers';
+import * as discord from '../../src/discord';
+import { DiscordAPIError } from '../../src/discord';
+
+
 
 // Helper to generate a code_challenge from a code_verifier
 const generateCodeChallenge = async (codeVerifier: string): Promise<string> => {
@@ -18,24 +22,14 @@ describe('/token endpoint', () => {
 	const { CODE_PRIVATE_KEY, JWT_PRIVATE_KEY } = wranglerJson.env.test.vars;
 
 	beforeEach(async () => {
-		// Mock the global fetch function for Discord API calls
-		vi.spyOn(global, 'fetch').mockImplementation((input: RequestInfo | URL) => {
-			if (typeof input === 'string' && input.startsWith('https://discord.com/api/users/@me')) {
-				return Promise.resolve(
-					new Response(
-						JSON.stringify({
-							id: 'discord_user_id',
-							username: 'testuser',
-							avatar: 'testavatar',
-							email: 'test@example.com',
-							verified: true,
-						}),
-						{ status: 200 },
-					),
-				);
-			}
-			return Promise.reject(new Error(`Unexpected fetch call to: ${input}`));
-		}) as any;
+		vi.spyOn(discord, 'getDiscordUser').mockResolvedValue({
+			id: 'discord_user_id',
+			username: 'testuser',
+			avatar: 'testavatar',
+			email: 'test@example.com',
+			verified: true,
+		});
+		vi.spyOn(discord, 'getDiscordUserRoles').mockResolvedValue([]);
 
 		await setUpOidcClients();
 	});
@@ -403,10 +397,9 @@ describe('/token endpoint', () => {
 		expect(await response.json()).toEqual({ error: 'invalid_grant', error_description: 'invalid code_verifier' });
 	});
 
-	it('should return 500 if Discord user info fetch fails', async () => {
+		it('should return 500 if Discord user info fetch fails', async () => {
 		const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-		// Temporarily override fetch to simulate a failed Discord user info fetch
-		vi.spyOn(global, 'fetch').mockImplementation(() => Promise.resolve(new Response('{}', { status: 400 }))) as any;
+		vi.spyOn(discord, 'getDiscordUser').mockRejectedValue(new DiscordAPIError('Failed to fetch user from Discord'));
 
 		const discordAccessToken = 'discord_access_token';
 		const nonce = 'test_nonce';

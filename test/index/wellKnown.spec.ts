@@ -11,7 +11,7 @@ describe('OIDC Provider', () => {
 			issuer: issuer,
 			authorization_endpoint: `${issuer}/auth`,
 			token_endpoint: `${issuer}/token`,
-			jwks_uri: `${issuer}/jwks.json`,
+			jwks_uri: `${issuer}/.well-known/jwks.json`,
 			userinfo_endpoint: `${issuer}/userinfo`,
 			response_types_supported: ['code'],
 			subject_types_supported: ['public'],
@@ -34,7 +34,7 @@ describe('OIDC Provider', () => {
 		};
 		vi.stubEnv('JWT_PRIVATE_KEY', JSON.stringify(privateJwk));
 
-		const response = await SELF.fetch('http://localhost/jwks.json', { redirect: 'manual' });
+		const response = await SELF.fetch('http://localhost/.well-known/jwks.json', { redirect: 'manual' });
 		expect(response.status).toBe(200);
 		const body = (await response.json()) as any;
 		expect(body.keys).toBeInstanceOf(Array);
