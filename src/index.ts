@@ -378,7 +378,6 @@ app.post('/token', async (c) => {
 
 export default app;
 
-
 // /userinfo - UserInfo endpoint
 app.get('/userinfo', async (c) => {
 	const authHeader = c.req.header('Authorization');

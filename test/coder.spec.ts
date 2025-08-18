@@ -38,9 +38,7 @@ describe('State', () => {
 			.setAudience(audience)
 			.setExpirationTime('10m')
 			.sign(secret);
-		await expect(decodeState(token, secret, issuer, audience)).rejects.toThrow(
-			'"alg" (Algorithm) Header Parameter value not allowed',
-		);
+		await expect(decodeState(token, secret, issuer, audience)).rejects.toThrow('"alg" (Algorithm) Header Parameter value not allowed');
 	});
 });
 
@@ -86,8 +84,6 @@ describe('Code', () => {
 			.setAudience(audience)
 			.setExpirationTime('5m')
 			.encrypt(codePublicKey);
-		await expect(decodeCode(token, privateJwk, issuer)).rejects.toThrow(
-			'"enc" (Encryption Algorithm) Header Parameter value not allowed',
-		);
+		await expect(decodeCode(token, privateJwk, issuer)).rejects.toThrow('"enc" (Encryption Algorithm) Header Parameter value not allowed');
 	});
 });
