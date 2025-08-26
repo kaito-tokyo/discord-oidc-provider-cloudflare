@@ -145,7 +145,6 @@ describe('/token endpoint', () => {
 			nonce: 'test_nonce',
 			user: user,
 			scope: 'openid',
-			fetched_at: new Date().toISOString(),
 		});
 
 		const formData = new URLSearchParams({
@@ -244,7 +243,6 @@ describe('/token endpoint', () => {
 			codeChallengeMethod: 'S256',
 			user: user,
 			scope: 'openid',
-			fetched_at: new Date().toISOString(),
 		});
 
 		const formData = new URLSearchParams({
@@ -281,7 +279,6 @@ describe('/token endpoint', () => {
 			codeChallengeMethod: 'S256',
 			user: user,
 			scope: 'openid',
-			fetched_at: new Date().toISOString(),
 		});
 
 		const formData = new URLSearchParams({
@@ -301,7 +298,7 @@ describe('/token endpoint', () => {
 		expect(await response.json()).toEqual({ error: 'invalid_grant', error_description: 'invalid code_verifier' });
 	});
 
-		it('should return 200 if Discord user info is already in code', async () => {
+	it('should return 200 if Discord user info is already in code', async () => {
 		// This test requires a valid code flow up to the point of token generation
 		const nonce = 'test_nonce';
 		const scope = 'openid profile email';

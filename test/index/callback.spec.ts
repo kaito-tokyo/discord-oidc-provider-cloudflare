@@ -10,10 +10,6 @@ describe('/callback endpoint', () => {
 	beforeEach(async () => {
 		vi.spyOn(discord, 'exchangeCode').mockResolvedValue({
 			access_token: 'discord_access_token',
-			token_type: 'Bearer',
-			expires_in: 604800,
-			refresh_token: 'discord_refresh_token',
-			scope: 'identify',
 		});
 		vi.spyOn(discord, 'getDiscordUser').mockResolvedValue({
 			id: 'discord_user_id',
@@ -125,7 +121,7 @@ describe('/callback endpoint', () => {
 			redirect: 'manual',
 		});
 		expect(response.status).toBe(500);
-				const body = await response.text();
+		const body = await response.text();
 		expect(body).toBe('Discord token exchange failed');
 	});
 });
