@@ -1,9 +1,9 @@
 import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
-import { decodeBase64 } from 'hono/utils/encode';
-import { type JWK, type JWTPayload, SignJWT, importJWK } from 'jose';
-import { type CodePayload, decodeCode, decodeState, encodeCode, encodeState } from './coder.js';
+import { type JWK, type JWTPayload, SignJWT, importJWK, jwtVerify } from 'jose';
+import { v7 as uuidv7 } from 'uuid';
 import { DiscordAPIError, exchangeCode, getDiscordUser, getDiscordUserRoles } from './discord.js';
+import { OidcState } from './oidcState.js';
 
 interface TokenErrorResponse {
 	error: string;
@@ -47,6 +47,11 @@ export interface TokenResponse {
 }
 
 const app = new Hono<{ Bindings: Env }>();
+
+function getOidcState(oidcState: Env['OIDC_STATE']): DurableObjectStub<OidcState> {
+	const doId = oidcState.idFromName('OIDC_STATE');
+	return oidcState.get(doId);
+}
 
 // .well-known/openid-configuration
 app.get('/.well-known/openid-configuration', (c) => {
@@ -103,7 +108,7 @@ app.get('/auth', async (c) => {
 	}
 
 	// Validate redirect_uri first, as it's crucial for error redirection
-	if (!client.redirect_uris.includes(redirect_uri)) {
+	if (!redirect_uri || !client.redirect_uris.includes(redirect_uri)) {
 		throw new HTTPException(400, { message: 'invalid redirect_uri' });
 	}
 
@@ -134,28 +139,25 @@ app.get('/auth', async (c) => {
 		discordScopes.push('guilds.members.read');
 	}
 
-	// Pack the original request info into a JWT and pass it to Discord as state
-	const stateJwt = await encodeState(
-		{
-			original_state: state,
-			redirect_uri: redirect_uri,
-			nonce: nonce,
-			scope: scope,
-			code_challenge: code_challenge,
-			code_challenge_method: code_challenge_method || 'S256',
-			client_id: client_id,
-		},
-		decodeBase64(c.env.STATE_SECRET),
-		new URL(c.req.url).origin,
-		c.env.DISCORD_CLIENT_ID,
-	);
+	const oidcState = getOidcState(c.env.OIDC_STATE);
+	const stateId = uuidv7();
+	await oidcState.storeState(stateId, {
+		state: state,
+		clientId: client_id,
+		redirectUri: redirect_uri,
+		responseType: response_type,
+		scope: scope,
+		nonce: nonce,
+		codeChallenge: code_challenge,
+		codeChallengeMethod: code_challenge_method || 'S256',
+	});
 
 	const discordAuthUrl = new URL('https://discord.com/api/oauth2/authorize');
 	discordAuthUrl.searchParams.set('client_id', c.env.DISCORD_CLIENT_ID);
 	discordAuthUrl.searchParams.set('redirect_uri', new URL('/callback', c.req.url).toString());
 	discordAuthUrl.searchParams.set('response_type', 'code');
 	discordAuthUrl.searchParams.set('scope', discordScopes.join(' '));
-	discordAuthUrl.searchParams.set('state', stateJwt);
+	discordAuthUrl.searchParams.set('state', stateId);
 
 	return c.redirect(discordAuthUrl.toString());
 });
@@ -163,13 +165,15 @@ app.get('/auth', async (c) => {
 // /callback - Redirect target from Discord
 app.get('/callback', async (c) => {
 	const { code, state } = c.req.query();
-	const issuer = new URL(c.req.url).origin;
 
 	if (!code) throw new HTTPException(400, { message: 'code is required' });
 	if (!state) throw new HTTPException(400, { message: 'state is required' });
 
-	// Verify the state (JWT)
-	const statePayload = await decodeState(state, decodeBase64(c.env.STATE_SECRET), issuer, c.env.DISCORD_CLIENT_ID);
+	const oidcState = getOidcState(c.env.OIDC_STATE);
+	const statePayload = await oidcState.getState(state);
+	if (!statePayload) {
+		throw new HTTPException(400, { message: 'invalid state' });
+	}
 
 	// Exchange the Discord authorization code for an access token
 	let discordTokens;
@@ -187,35 +191,23 @@ app.get('/callback', async (c) => {
 		throw e;
 	}
 
-	const getCodePublicJwk = (privateJwk: JWK): JWK => ({
-		kty: privateJwk.kty,
-		crv: privateJwk.crv,
-		x: privateJwk.x,
-		y: privateJwk.y,
-		alg: 'ECDH-ES',
-		kid: privateJwk.kid,
-		use: 'enc',
+	const user = await getDiscordUser(discordTokens.access_token);
+	const codeId = uuidv7();
+	await oidcState.storeCode(codeId, {
+		redirectUri: statePayload.redirectUri,
+		clientId: statePayload.clientId,
+		codeChallenge: statePayload.codeChallenge,
+		codeChallengeMethod: statePayload.codeChallengeMethod,
+		nonce: statePayload.nonce,
+		user: user,
+		scope: statePayload.scope,
+		discordAccessToken: discordTokens.access_token,
 	});
 
-	// Encrypt the Discord access token etc. into a JWE to be used as the OIDC authorization code
-	const codePrivateJsonKey = JSON.parse(c.env.CODE_PRIVATE_KEY) as JWK;
-	const oidcCode = await encodeCode(
-		{
-			discord_access_token: discordTokens.access_token,
-			nonce: statePayload.nonce,
-			scope: statePayload.scope,
-			code_challenge: statePayload.code_challenge,
-			code_challenge_method: statePayload.code_challenge_method,
-		},
-		getCodePublicJwk(codePrivateJsonKey),
-		issuer,
-		statePayload.client_id,
-	);
-
 	// Redirect to the original client
-	const finalRedirectUri = new URL(statePayload.redirect_uri);
-	finalRedirectUri.searchParams.set('code', oidcCode);
-	finalRedirectUri.searchParams.set('state', statePayload.original_state);
+	const finalRedirectUri = new URL(statePayload.redirectUri);
+	finalRedirectUri.searchParams.set('code', codeId);
+	finalRedirectUri.searchParams.set('state', statePayload.state);
 
 	return c.redirect(finalRedirectUri.toString());
 });
@@ -231,33 +223,19 @@ app.post('/token', async (c) => {
 	}
 
 	// Validate code
-	if (!body.code) {
+	if (!body.code || typeof body.code !== 'string') {
 		return c.json<TokenErrorResponse>({ error: 'invalid_request', error_description: 'code is required' }, 400);
 	}
+	const code = body.code;
 
-	// Decrypt the authorization code (JWE) early to get codePayload
-	let codePayload: CodePayload;
-	try {
-		const codePrivateKey = JSON.parse(c.env.CODE_PRIVATE_KEY) as JWK;
-		const tempPayload = await decodeCode(body.code as string, codePrivateKey, issuer);
-
-		// Now verify the audience using the client_id from the request body if present,
-		// or fallback to the audience from the token.
-		const clientIdFromRequest = body.client_id as string | undefined;
-		const audience = tempPayload.aud as string;
-
-		if (clientIdFromRequest && clientIdFromRequest !== audience) {
-			throw new Error('client_id mismatch');
-		}
-
-		codePayload = tempPayload;
-	} catch (e) {
-		console.error(e);
+	const oidcState = getOidcState(c.env.OIDC_STATE);
+	const codePayload = await oidcState.getCode(code);
+	if (!codePayload) {
 		return c.json<TokenErrorResponse>({ error: 'invalid_grant', error_description: 'invalid authorization code' }, 400);
 	}
 
-	const client_id = codePayload.aud as string;
-	const isPkceFlowCode = !!codePayload.code_challenge;
+	const client_id = codePayload.clientId;
+	const isPkceFlowCode = !!codePayload.codeChallenge;
 
 	// Handle PKCE vs. non-PKCE flows
 	if (isPkceFlowCode) {
@@ -273,7 +251,7 @@ app.post('/token', async (c) => {
 			.replace(/=/g, '')
 			.replace(/\+/g, '-')
 			.replace(/\//g, '_');
-		if (challenge !== codePayload.code_challenge) {
+		if (challenge !== codePayload.codeChallenge) {
 			return c.json<TokenErrorResponse>({ error: 'invalid_grant', error_description: 'invalid code_verifier' }, 400);
 		}
 	} else {
@@ -307,12 +285,17 @@ app.post('/token', async (c) => {
 
 	try {
 		// Fetch user information from Discord
-		const user = await getDiscordUser(codePayload.discord_access_token as string);
+		const user = codePayload.user;
 
 		let userRoles: string[] = [];
 		if (typeof c.env.DISCORD_GUILD_IDS === 'string' && c.env.DISCORD_GUILD_IDS.trim().length > 0) {
 			const guildIds = c.env.DISCORD_GUILD_IDS.split(',').map((id) => id.trim());
-			userRoles = await getDiscordUserRoles(codePayload.discord_access_token as string, guildIds);
+			try {
+				userRoles = await getDiscordUserRoles(codePayload.discordAccessToken, guildIds);
+			} catch (e) {
+				console.error('Failed to get Discord user roles', e);
+				// Do not block token issuance if role fetching fails
+			}
 		}
 
 		const privateJwk = JSON.parse(c.env.JWT_PRIVATE_KEY) as JWK;
@@ -336,7 +319,7 @@ app.post('/token', async (c) => {
 				picture: `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png`,
 				email: user.email,
 				email_verified: user.verified,
-				nonce: codePayload.nonce as string,
+				nonce: codePayload.nonce,
 				roles: userRoles, // Add roles claim here
 			},
 			client_id,
@@ -376,8 +359,6 @@ app.post('/token', async (c) => {
 	}
 });
 
-export default app;
-
 // /userinfo - UserInfo endpoint
 app.get('/userinfo', async (c) => {
 	const authHeader = c.req.header('Authorization');
@@ -405,8 +386,11 @@ app.get('/userinfo', async (c) => {
 		};
 
 		return c.json(userinfo);
-	} catch (e) {
+	} catch (_e) {
 		// This will catch errors from jwtVerify (e.g., invalid signature, expired token)
 		throw new HTTPException(401, { message: 'Invalid token' });
 	}
 });
+
+export default app;
+export { OidcState };

@@ -22,7 +22,15 @@
 					"binding": "OIDC_CLIENTS",
 					"id": "72ec7266568d4dbebb7c55cc0eadc7ee"
 				}
-			]
+			],
+			"durable_objects": {
+				"bindings": [
+					{
+						"name": "OIDC_STATE",
+						"class_name": "OidcState"
+					}
+				]
+			}
 		},
 		"test": {
 			"vars": {
@@ -38,8 +46,22 @@
 					"binding": "OIDC_CLIENTS",
 					"id": "dummy"
 				}
-			]
+			],
+			"durable_objects": {
+				"bindings": [
+					{
+						"name": "OIDC_STATE",
+						"class_name": "OidcState"
+					}
+				]
+			}
 		}
 	},
-	"placement": { "mode": "smart" }
+	"placement": { "mode": "smart" },
+	"migrations": [
+		{
+			"tag": "v1",
+			"new_sqlite_classes": ["OidcState"]
+		}
+	]
 }
