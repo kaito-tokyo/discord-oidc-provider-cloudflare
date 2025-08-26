@@ -202,6 +202,7 @@ app.get('/callback', async (c) => {
 		nonce: statePayload.nonce,
 		user: user,
 		scope: statePayload.scope,
+		fetched_at: new Date().toISOString(),
 	})
 
 	// Redirect to the original client

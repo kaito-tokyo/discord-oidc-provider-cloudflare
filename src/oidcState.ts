@@ -20,6 +20,7 @@ export interface Code {
 	nonce?: string
 	user: DiscordUser
 	scope: string
+	fetched_at: string
 }
 
 export class OidcState extends DurableObject {
@@ -57,7 +58,7 @@ export class OidcState extends DurableObject {
 		const toDelete: string[] = []
 		for (const [key, value] of oldCodes.entries()) {
 			// This is a bit of a hack, but there's no way to get metadata otherwise
-			const issuedAt = new Date(value.user.fetched_at).getTime()
+			const issuedAt = new Date(value.fetched_at).getTime()
 			if (now - issuedAt > 1000 * 60 * 10) {
 				toDelete.push(key)
 			}

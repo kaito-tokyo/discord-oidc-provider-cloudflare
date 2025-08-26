@@ -31,6 +31,8 @@ describe('/token endpoint', () => {
 	beforeEach(async () => {
 		vi.spyOn(discord, 'getDiscordUserRoles').mockResolvedValue([]);
 		await setUpOidcClients();
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		vi.spyOn(console, 'warn').mockImplementation(() => {});
 	});
 
 	afterEach(() => {
@@ -54,6 +56,7 @@ describe('/token endpoint', () => {
 			nonce: nonce,
 			user: user,
 			scope: scope,
+			fetched_at: new Date().toISOString(),
 		});
 
 		const formData = new URLSearchParams({
@@ -143,6 +146,7 @@ describe('/token endpoint', () => {
 			nonce: 'test_nonce',
 			user: user,
 			scope: 'openid',
+			fetched_at: new Date().toISOString(),
 		});
 
 		const formData = new URLSearchParams({
@@ -176,6 +180,7 @@ describe('/token endpoint', () => {
 			nonce: nonce,
 			user: user,
 			scope: scope,
+			fetched_at: new Date().toISOString(),
 		});
 
 		const formData = new URLSearchParams({
@@ -241,6 +246,7 @@ describe('/token endpoint', () => {
 			codeChallengeMethod: 'S256',
 			user: user,
 			scope: 'openid',
+			fetched_at: new Date().toISOString(),
 		});
 
 		const formData = new URLSearchParams({
@@ -277,6 +283,7 @@ describe('/token endpoint', () => {
 			codeChallengeMethod: 'S256',
 			user: user,
 			scope: 'openid',
+			fetched_at: new Date().toISOString(),
 		});
 
 		const formData = new URLSearchParams({
@@ -298,7 +305,6 @@ describe('/token endpoint', () => {
 
 		it('should return 200 if Discord user info is already in code', async () => {
 		// This test requires a valid code flow up to the point of token generation
-		const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 		const nonce = 'test_nonce';
 		const scope = 'openid profile email';
 		const codeVerifier = 'test_code_verifier_123456789012345678901234567890';
@@ -315,6 +321,7 @@ describe('/token endpoint', () => {
 			nonce: nonce,
 			user: user,
 			scope: scope,
+			fetched_at: new Date().toISOString(),
 		});
 
 		const formData = new URLSearchParams({
@@ -331,6 +338,5 @@ describe('/token endpoint', () => {
 		});
 
 		expect(response.status).toBe(200);
-		consoleErrorSpy.mockRestore();
 	});
 });
