@@ -20,6 +20,7 @@ export interface Code {
 	nonce?: string;
 	user: DiscordUser;
 	scope: string;
+	discordAccessToken: string;
 }
 
 export class OidcState extends DurableObject {
@@ -71,6 +72,10 @@ export class OidcState extends DurableObject {
 			// Extract timestamp from UUIDv7
 			const timestampHex = id.substring(0, 8) + id.substring(9, 13);
 			const issuedAt = parseInt(timestampHex, 16);
+
+			if (isNaN(issuedAt)) {
+				continue;
+			}
 
 			if (now - issuedAt > 1000 * 60 * 10) {
 				// 10 minutes for both

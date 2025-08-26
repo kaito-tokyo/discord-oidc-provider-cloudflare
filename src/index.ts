@@ -201,6 +201,7 @@ app.get('/callback', async (c) => {
 		nonce: statePayload.nonce,
 		user: user,
 		scope: statePayload.scope,
+		discordAccessToken: discordTokens.access_token,
 	});
 
 	// Redirect to the original client
@@ -286,13 +287,15 @@ app.post('/token', async (c) => {
 		// Fetch user information from Discord
 		const user = codePayload.user;
 
-		const userRoles: string[] = [];
+		let userRoles: string[] = [];
 		if (typeof c.env.DISCORD_GUILD_IDS === 'string' && c.env.DISCORD_GUILD_IDS.trim().length > 0) {
 			const guildIds = c.env.DISCORD_GUILD_IDS.split(',').map((id) => id.trim());
-			// We need to get the user's access token from somewhere. It's not in the codePayload.
-			// This is a bug in the original code. We can't get roles without the access token.
-			// For now, I will pass an empty array.
-			console.warn('Cannot fetch user roles without Discord access token.');
+			try {
+				userRoles = await getDiscordUserRoles(codePayload.discordAccessToken, guildIds);
+			} catch (e) {
+				console.error('Failed to get Discord user roles', e);
+				// Do not block token issuance if role fetching fails
+			}
 		}
 
 		const privateJwk = JSON.parse(c.env.JWT_PRIVATE_KEY) as JWK;
@@ -383,7 +386,7 @@ app.get('/userinfo', async (c) => {
 		};
 
 		return c.json(userinfo);
-	} catch (e) {
+	} catch (_e) {
 		// This will catch errors from jwtVerify (e.g., invalid signature, expired token)
 		throw new HTTPException(401, { message: 'Invalid token' });
 	}

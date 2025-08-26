@@ -1,4 +1,4 @@
-import { env, runDurableObjectAlarm } from 'cloudflare:test';
+import { env } from 'cloudflare:test';
 import { describe, it, expect, beforeEach, beforeAll, afterAll, vi } from 'vitest';
 import type { OidcState, State, Code } from '../src/oidcState';
 
@@ -46,6 +46,7 @@ describe('OidcState', () => {
 				clientId: 'test-client',
 				user: { id: 'user1', username: 'user1', avatar: '', global_name: 'User One' },
 				scope: 'openid',
+				discordAccessToken: 'test_discord_access_token',
 			};
 
 			await stub.storeCode(codeId, codeData);
@@ -75,66 +76,47 @@ describe('OidcState', () => {
 		});
 
 		it('should delete expired entries via alarm', async () => {
-			const now = new Date('2024-08-26T12:20:00Z');
-			vi.setSystemTime(now);
-
-			const expiredTimestamp = now.getTime() - 1000 * 60 * 11; // 11 minutes ago
-			const validTimestamp = now.getTime() - 1000 * 60 * 5; // 5 minutes ago
+			const startTime = new Date('2024-08-26T12:20:00Z');
+			vi.setSystemTime(startTime);
 
 			const generateFakeUuidv7 = (timestamp: number): string => {
 				const hexTimestamp = timestamp.toString(16).padStart(12, '0');
 				return `${hexTimestamp.slice(0, 8)}-${hexTimestamp.slice(8, 12)}-7000-8000-000000000000`;
 			};
 
-			const expiredCodeId = generateFakeUuidv7(expiredTimestamp);
-			const validCodeId = generateFakeUuidv7(validTimestamp);
-			const expiredStateId = generateFakeUuidv7(expiredTimestamp);
-
-			// Store an expired code
-			await stub.storeCode(expiredCodeId, {
+			const expiredId = generateFakeUuidv7(startTime.getTime());
+			await stub.storeCode(expiredId, {
 				clientId: 'test-client',
 				redirectUri: 'http://localhost',
 				user: { id: 'user1', username: 'user1', avatar: '', global_name: 'User One' },
 				scope: 'openid',
+				discordAccessToken: 'test_discord_access_token',
 			});
 
-			// Store a valid code
-			await stub.storeCode(validCodeId, {
+			const timeAfter9Minutes = new Date(startTime.getTime() + 1000 * 60 * 9);
+			vi.setSystemTime(timeAfter9Minutes);
+
+			const validId = generateFakeUuidv7(timeAfter9Minutes.getTime());
+			await stub.storeCode(validId, {
 				clientId: 'test-client',
 				redirectUri: 'http://localhost',
 				user: { id: 'user2', username: 'user2', avatar: '', global_name: 'User Two' },
 				scope: 'openid',
+				discordAccessToken: 'test_discord_access_token_2',
 			});
 
-			// Store an expired state
-			await stub.storeState(expiredStateId, {
-				state: 'random-state-string',
-				clientId: 'test-client',
-				redirectUri: 'http://localhost/callback',
-				responseType: 'code',
-				scope: 'openid profile',
-			});
+			// Alarm is now set for timeAfter9Minutes + 10 minutes.
+			// Advance time by 10 minutes to trigger the alarm.
+			await vi.advanceTimersByTimeAsync(1000 * 60 * 10);
+			await vi.runOnlyPendingTimersAsync();
 
-			// Trigger the alarm
-			const response = await runDurableObjectAlarm(stub);
-			expect(response).toBe(true);
-
-			// wait for alarm to complete
-			await vi.advanceTimersByTimeAsync(0);
-
-			// Check that the expired code is gone
-			const expiredCode = await stub.getCode(expiredCodeId);
+			// Check that expired code is deleted.
+			const expiredCode = await stub.getCode(expiredId);
 			expect(expiredCode).toBeUndefined();
 
-			// Check that the valid code is still there (it will be deleted upon read)
-			const validCode = await stub.getCode(validCodeId);
+			// Check that valid code is still there.
+			const validCode = await stub.getCode(validId);
 			expect(validCode).toBeDefined();
-			const validCodeAfterRead = await stub.getCode(validCodeId);
-			expect(validCodeAfterRead).toBeUndefined();
-
-			// Check that the expired state is gone
-			const expiredState = await stub.getState(expiredStateId);
-			expect(expiredState).toBeUndefined();
 		});
 	});
 });

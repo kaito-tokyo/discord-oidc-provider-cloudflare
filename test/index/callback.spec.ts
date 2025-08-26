@@ -3,7 +3,6 @@ import { v7 as uuidv7 } from 'uuid';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as discord from '../../src/discord.js';
 import { DiscordAPIError } from '../../src/discord.js';
-import { OidcState } from '../../src/oidcState.js';
 import { setUpOidcClients, TEST_OIDC_CLIENT_ID, TEST_OIDC_REDIRECT_URI } from '../test_helpers.js';
 
 describe('/callback endpoint', () => {

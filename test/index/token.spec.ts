@@ -3,9 +3,7 @@ import { importJWK, jwtVerify } from 'jose';
 import { v7 as uuidv7 } from 'uuid';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as discord from '../../src/discord.js';
-import { DiscordAPIError } from '../../src/discord.js';
 import type { TokenResponse } from '../../src/index.js';
-import { OidcState } from '../../src/oidcState.js';
 import wranglerJson from '../../wrangler.json';
 import { setUpOidcClients, TEST_OIDC_CLIENT_ID, TEST_OIDC_CLIENT_SECRET, TEST_OIDC_REDIRECT_URI } from '../test_helpers.js';
 
@@ -56,6 +54,7 @@ describe('/token endpoint', () => {
 			nonce: nonce,
 			user: user,
 			scope: scope,
+			discordAccessToken: 'test_discord_access_token',
 		});
 
 		const formData = new URLSearchParams({
@@ -145,6 +144,7 @@ describe('/token endpoint', () => {
 			nonce: 'test_nonce',
 			user: user,
 			scope: 'openid',
+			discordAccessToken: 'test_discord_access_token',
 		});
 
 		const formData = new URLSearchParams({
@@ -178,6 +178,7 @@ describe('/token endpoint', () => {
 			nonce: nonce,
 			user: user,
 			scope: scope,
+			discordAccessToken: 'test_discord_access_token',
 		});
 
 		const formData = new URLSearchParams({
@@ -243,6 +244,7 @@ describe('/token endpoint', () => {
 			codeChallengeMethod: 'S256',
 			user: user,
 			scope: 'openid',
+			discordAccessToken: 'test_discord_access_token',
 		});
 
 		const formData = new URLSearchParams({
@@ -279,6 +281,7 @@ describe('/token endpoint', () => {
 			codeChallengeMethod: 'S256',
 			user: user,
 			scope: 'openid',
+			discordAccessToken: 'test_discord_access_token',
 		});
 
 		const formData = new URLSearchParams({
@@ -298,12 +301,14 @@ describe('/token endpoint', () => {
 		expect(await response.json()).toEqual({ error: 'invalid_grant', error_description: 'invalid code_verifier' });
 	});
 
-	it('should return 200 if Discord user info is already in code', async () => {
-		// This test requires a valid code flow up to the point of token generation
+	it('should return 200 and fetch roles if guild IDs are configured', async () => {
 		const nonce = 'test_nonce';
 		const scope = 'openid profile email';
 		const codeVerifier = 'test_code_verifier_123456789012345678901234567890';
 		const codeChallenge = await generateCodeChallenge(codeVerifier);
+		const expectedRoles = ['role1', 'role2'];
+
+		const getRolesSpy = vi.spyOn(discord, 'getDiscordUserRoles').mockResolvedValue(expectedRoles);
 
 		const codeId = uuidv7();
 		const doId = env.OIDC_STATE.idFromName('OIDC_STATE');
@@ -316,6 +321,7 @@ describe('/token endpoint', () => {
 			nonce: nonce,
 			user: user,
 			scope: scope,
+			discordAccessToken: 'test_discord_access_token',
 		});
 
 		const formData = new URLSearchParams({
@@ -332,5 +338,14 @@ describe('/token endpoint', () => {
 		});
 
 		expect(response.status).toBe(200);
+		const body = (await response.json()) as TokenResponse;
+
+		expect(getRolesSpy).toHaveBeenCalledWith('test_discord_access_token', ['discord-guild-id']);
+
+		const privateJwk = JSON.parse(JWT_PRIVATE_KEY);
+		const publicKey = await importJWK({ ...privateJwk, d: undefined }, 'ES256');
+		const { payload: idTokenPayload } = await jwtVerify(body.id_token, publicKey);
+
+		expect(idTokenPayload.roles).toEqual(expectedRoles);
 	});
 });
