@@ -1,4 +1,5 @@
 import { DurableObject } from "cloudflare:workers"
+import { DiscordUser } from "./discord"
 
 export interface State {
 	state: string
@@ -17,8 +18,7 @@ export interface Code {
 	codeChallenge?: string
 	codeChallengeMethod?: string
 	nonce?: string
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	user: any
+	user: DiscordUser
 	scope: string
 }
 
