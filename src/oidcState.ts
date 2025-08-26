@@ -20,7 +20,6 @@ export interface Code {
 	nonce?: string
 	user: DiscordUser
 	scope: string
-	fetched_at: string
 }
 
 export class OidcState extends DurableObject {
@@ -30,10 +29,16 @@ export class OidcState extends DurableObject {
 
 	async storeState(stateId: string, data: State): Promise<void> {
 		await this.ctx.storage.put(`state:${stateId}`, data)
+		this.ctx.storage.setAlarm(Date.now() + 1000 * 60 * 10) // 10 minutes
 	}
 
 	async getState(stateId: string): Promise<State | undefined> {
-		return await this.ctx.storage.get<State>(`state:${stateId}`)
+		const state = await this.ctx.storage.get<State>(`state:${stateId}`)
+		if (state) {
+			// To prevent replay attacks, states should be single-use.
+			await this.ctx.storage.delete(`state:${stateId}`)
+		}
+		return state
 	}
 
 	async storeCode(codeId: string, data: Code): Promise<void> {
@@ -52,17 +57,29 @@ export class OidcState extends DurableObject {
 	}
 
 	async alarm() {
-		// Clean up expired codes
+		// Clean up expired codes and states
 		const now = Date.now()
-		const oldCodes = await this.ctx.storage.list<Code>({ prefix: 'code:', allowConcurrency: true })
+		const oldEntries = await this.ctx.storage.list({ allowConcurrency: true })
 		const toDelete: string[] = []
-		for (const [key, value] of oldCodes.entries()) {
-			// This is a bit of a hack, but there's no way to get metadata otherwise
-			const issuedAt = new Date(value.fetched_at).getTime()
+
+		for (const key of oldEntries.keys()) {
+			if (!key.startsWith("code:") && !key.startsWith("state:")) {
+				continue
+			}
+
+			const id = key.substring(key.indexOf(":") + 1)
+			// Extract timestamp from UUIDv7
+			const timestampHex = id.substring(0, 8) + id.substring(9, 13)
+			const issuedAt = parseInt(timestampHex, 16)
+
 			if (now - issuedAt > 1000 * 60 * 10) {
+				// 10 minutes for both
 				toDelete.push(key)
 			}
 		}
-		await this.ctx.storage.delete(toDelete)
+
+		if (toDelete.length > 0) {
+			await this.ctx.storage.delete(toDelete)
+		}
 	}
 }

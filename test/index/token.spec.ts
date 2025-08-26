@@ -56,7 +56,6 @@ describe('/token endpoint', () => {
 			nonce: nonce,
 			user: user,
 			scope: scope,
-			fetched_at: new Date().toISOString(),
 		});
 
 		const formData = new URLSearchParams({
@@ -180,7 +179,6 @@ describe('/token endpoint', () => {
 			nonce: nonce,
 			user: user,
 			scope: scope,
-			fetched_at: new Date().toISOString(),
 		});
 
 		const formData = new URLSearchParams({
@@ -321,7 +319,6 @@ describe('/token endpoint', () => {
 			nonce: nonce,
 			user: user,
 			scope: scope,
-			fetched_at: new Date().toISOString(),
 		});
 
 		const formData = new URLSearchParams({

@@ -202,7 +202,6 @@ app.get('/callback', async (c) => {
 		nonce: statePayload.nonce,
 		user: user,
 		scope: statePayload.scope,
-		fetched_at: new Date().toISOString(),
 	})
 
 	// Redirect to the original client
@@ -288,7 +287,7 @@ app.post('/token', async (c) => {
 		// Fetch user information from Discord
 		const user = codePayload.user
 
-		let userRoles: string[] = []
+		const userRoles: string[] = []
 		if (typeof c.env.DISCORD_GUILD_IDS === 'string' && c.env.DISCORD_GUILD_IDS.trim().length > 0) {
 			const guildIds = c.env.DISCORD_GUILD_IDS.split(',').map((id) => id.trim())
 			// We need to get the user's access token from somewhere. It's not in the codePayload.
