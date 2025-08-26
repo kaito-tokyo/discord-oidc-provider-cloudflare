@@ -3,7 +3,7 @@ import { HTTPException } from 'hono/http-exception'
 import { type JWK, type JWTPayload, SignJWT, importJWK, jwtVerify } from 'jose'
 import { v7 as uuidv7 } from 'uuid'
 import { DiscordAPIError, exchangeCode, getDiscordUser, getDiscordUserRoles } from './discord.js'
-import { OIDCState } from './oidcState.js'
+import { OidcState } from './oidcState.js'
 
 interface TokenErrorResponse {
 	error: string
@@ -48,7 +48,7 @@ export interface TokenResponse {
 
 const app = new Hono<{ Bindings: Env }>()
 
-function getOidcState(oidcState: Env['OIDC_STATE']): DurableObjectStub<OIDCState> {
+function getOidcState(oidcState: Env['OIDC_STATE']): DurableObjectStub<OidcState> {
 	const doId = oidcState.idFromName('OIDC_STATE')
 	return oidcState.get(doId)
 }
@@ -391,4 +391,4 @@ app.get('/userinfo', async (c) => {
 })
 
 export default app
-export { OIDCState } from './oidcState.js'
+export { OidcState }

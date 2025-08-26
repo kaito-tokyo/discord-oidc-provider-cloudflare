@@ -22,7 +22,15 @@
 					"binding": "OIDC_CLIENTS",
 					"id": "72ec7266568d4dbebb7c55cc0eadc7ee"
 				}
-			]
+			],
+			"durable_objects": {
+				"bindings": [
+					{
+						"name": "OIDC_STATE",
+						"class_name": "OidcState"
+					}
+				]
+			}
 		},
 		"test": {
 			"vars": {
@@ -39,17 +47,17 @@
 					"id": "dummy"
 				}
 			],
+			"durable_objects": {
+				"bindings": [
+					{
+						"name": "OIDC_STATE",
+						"class_name": "OidcState"
+					}
+				]
+			}
 		}
 	},
 	"placement": { "mode": "smart" },
-	"durable_objects": {
-		"bindings": [
-			{
-				"name": "OIDC_STATE",
-				"class_name": "OidcState"
-			}
-		]
-	},
 	"migrations": [
 		{
 			"tag": "v1",

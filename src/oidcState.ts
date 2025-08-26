@@ -22,7 +22,7 @@ export interface Code {
 	scope: string
 }
 
-export class OIDCState extends DurableObject {
+export class OidcState extends DurableObject {
 	constructor(ctx: DurableObjectState, env: Env) {
 		super(ctx, env)
 	}

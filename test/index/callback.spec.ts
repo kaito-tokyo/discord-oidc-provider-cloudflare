@@ -1,20 +1,26 @@
-import { SELF } from 'cloudflare:test';
-import { decodeBase64Url } from 'hono/utils/encode';
-import { importJWK, jwtDecrypt, SignJWT } from 'jose';
+import { SELF, env } from 'cloudflare:test';
+import { v7 as uuidv7 } from 'uuid';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import wranglerJson from '../../wrangler.json';
+import * as discord from '../../src/discord.js';
+import { DiscordAPIError } from '../../src/discord.js';
+import { OidcState } from '../../src/oidcState.js';
 import { setUpOidcClients, TEST_OIDC_CLIENT_ID, TEST_OIDC_REDIRECT_URI } from '../test_helpers.js';
 
 describe('/callback endpoint', () => {
-	const { STATE_SECRET, DISCORD_CLIENT_ID, CODE_PRIVATE_KEY } = wranglerJson.env.test.vars;
-
 	beforeEach(async () => {
-		const fetchSpy = vi.spyOn(global, 'fetch');
-		fetchSpy.mockImplementation((input: RequestInfo | URL, _init?: RequestInit) => {
-			if (typeof input === 'string' && input.startsWith('https://discord.com/api/oauth2/token')) {
-				return Promise.resolve(new Response(JSON.stringify({ access_token: 'discord_access_token' }), { status: 200 }));
-			}
-			return Promise.reject(new Error(`Unexpected fetch call to: ${input}`));
+		vi.spyOn(discord, 'exchangeCode').mockResolvedValue({
+			access_token: 'discord_access_token',
+			token_type: 'Bearer',
+			expires_in: 604800,
+			refresh_token: 'discord_refresh_token',
+			scope: 'identify',
+		});
+		vi.spyOn(discord, 'getDiscordUser').mockResolvedValue({
+			id: 'discord_user_id',
+			username: 'testuser',
+			avatar: 'testavatar',
+			email: 'test@example.com',
+			verified: true,
 		});
 
 		await setUpOidcClients();
@@ -25,64 +31,54 @@ describe('/callback endpoint', () => {
 	});
 
 	it('should handle successful callback and redirect with OIDC code', async () => {
-		const originalState = 'random_state_string';
-		const redirectUri = TEST_OIDC_REDIRECT_URI;
-		const nonce = 'random_nonce_string';
-		const scope = 'openid profile email';
-		const codeChallenge = 'code_challenge';
-		const codeChallengeMethod = 'S256';
+		const stateId = uuidv7();
+		const statePayload = {
+			state: 'random_state_string',
+			clientId: TEST_OIDC_CLIENT_ID,
+			redirectUri: TEST_OIDC_REDIRECT_URI,
+			responseType: 'code',
+			scope: 'openid profile email',
+			nonce: 'random_nonce_string',
+			codeChallenge: 'code_challenge',
+			codeChallengeMethod: 'S256',
+		};
 
-		// Create a mock state JWT
-		const stateJwt = await new SignJWT({
-			original_state: originalState,
-			redirect_uri: redirectUri,
-			nonce: nonce,
-			scope: scope,
-			code_challenge: codeChallenge,
-			code_challenge_method: codeChallengeMethod,
-			client_id: TEST_OIDC_CLIENT_ID,
-		})
-			.setProtectedHeader({ alg: 'HS256' })
-			.setIssuedAt()
-			.setIssuer('http://localhost')
-			.setAudience(DISCORD_CLIENT_ID)
-			.setExpirationTime('10m')
-			.sign(decodeBase64Url(STATE_SECRET));
+		const doId = env.OIDC_STATE.idFromName('OIDC_STATE');
+		const oidcState = env.OIDC_STATE.get(doId);
+		await oidcState.storeState(stateId, statePayload);
 
 		const discordAuthCode = 'discord_auth_code';
-
-		const response = await SELF.fetch(`http://localhost/callback?code=${discordAuthCode}&state=${stateJwt}`, { redirect: 'manual' });
+		const response = await SELF.fetch(`http://localhost/callback?code=${discordAuthCode}&state=${stateId}`, {
+			redirect: 'manual',
+		});
 
 		expect(response.status).toBe(302); // Expect a redirect
 		const redirectLocation = response.headers.get('location');
 		expect(redirectLocation).toBeDefined();
 
 		const redirectUrl = new URL(redirectLocation!);
-		expect(redirectUrl.origin).toBe(new URL(redirectUri).origin);
-		expect(redirectUrl.pathname).toBe(new URL(redirectUri).pathname);
-		expect(redirectUrl.searchParams.get('state')).toBe(originalState);
+		expect(redirectUrl.origin).toBe(new URL(statePayload.redirectUri).origin);
+		expect(redirectUrl.pathname).toBe(new URL(statePayload.redirectUri).pathname);
+		expect(redirectUrl.searchParams.get('state')).toBe(statePayload.state);
 
-		const oidcCode = redirectUrl.searchParams.get('code');
-		expect(oidcCode).toBeDefined();
+		const oidcCodeId = redirectUrl.searchParams.get('code');
+		expect(oidcCodeId).toBeDefined();
 
-		const codePrivateKey = await importJWK(JSON.parse(CODE_PRIVATE_KEY));
-
-		// Verify the OIDC code (JWE)
-		const { payload: oidcCodePayload } = await jwtDecrypt(oidcCode!, codePrivateKey, {
-			issuer: 'http://localhost',
-			audience: TEST_OIDC_CLIENT_ID,
-		});
-
-		expect(oidcCodePayload.discord_access_token).toBe('discord_access_token');
-		expect(oidcCodePayload.nonce).toBe(nonce);
-		expect(oidcCodePayload.scope).toBe(scope);
-		expect(oidcCodePayload.code_challenge).toBe(codeChallenge);
-		expect(oidcCodePayload.code_challenge_method).toBe(codeChallengeMethod);
+		// Verify the stored OIDC code payload
+		const codePayload = await oidcState.getCode(oidcCodeId!);
+		expect(codePayload).toBeDefined();
+		expect(codePayload!.clientId).toBe(statePayload.clientId);
+		expect(codePayload!.redirectUri).toBe(statePayload.redirectUri);
+		expect(codePayload!.nonce).toBe(statePayload.nonce);
+		expect(codePayload!.scope).toBe(statePayload.scope);
+		expect(codePayload!.codeChallenge).toBe(statePayload.codeChallenge);
+		expect(codePayload!.codeChallengeMethod).toBe(statePayload.codeChallengeMethod);
+		expect(codePayload!.user.id).toBe('discord_user_id');
 	});
 
 	it('should return 400 if code is missing', async () => {
-		const stateJwt = 'some_state_jwt'; // A dummy state, as the check for code comes first
-		const response = await SELF.fetch(`http://localhost/callback?state=${stateJwt}`, { redirect: 'manual' });
+		const stateId = 'some_state_id';
+		const response = await SELF.fetch(`http://localhost/callback?state=${stateId}`, { redirect: 'manual' });
 		expect(response.status).toBe(400);
 		const body = await response.text();
 		expect(body).toBe('code is required');
@@ -96,49 +92,40 @@ describe('/callback endpoint', () => {
 		expect(body).toBe('state is required');
 	});
 
-	it('should return 500 if state JWT verification fails', async () => {
-		const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+	it('should return 400 if state is invalid', async () => {
 		const discordAuthCode = 'discord_auth_code';
-		const invalidStateJwt = 'invalid.jwt.signature'; // An invalid JWT
-		const response = await SELF.fetch(`http://localhost/callback?code=${discordAuthCode}&state=${invalidStateJwt}`, { redirect: 'manual' });
-		expect(response.status).toBe(500); // Hono's HTTPException for JWT verification failure
-		consoleErrorSpy.mockRestore();
+		const invalidStateId = 'invalid_state_id';
+		const response = await SELF.fetch(`http://localhost/callback?code=${discordAuthCode}&state=${invalidStateId}`, {
+			redirect: 'manual',
+		});
+		expect(response.status).toBe(400);
+		const body = await response.text();
+		expect(body).toBe('invalid state');
 	});
 
 	it('should return 500 if Discord token exchange fails', async () => {
-		const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-		// Temporarily override fetch to simulate a failed Discord token exchange
-		global.fetch = vi.fn(() => Promise.resolve(new Response('{}', { status: 400 }))) as any;
+		vi.spyOn(discord, 'exchangeCode').mockRejectedValue(new DiscordAPIError('Discord token exchange failed'));
 
-		const originalState = 'random_state_string';
-		const redirectUri = TEST_OIDC_REDIRECT_URI;
-		const nonce = 'random_nonce_string';
-		const scope = 'openid profile email';
-		const codeChallenge = 'code_challenge';
-		const codeChallengeMethod = 'S256';
+		const stateId = uuidv7();
+		const statePayload = {
+			state: 'random_state_string',
+			clientId: TEST_OIDC_CLIENT_ID,
+			redirectUri: TEST_OIDC_REDIRECT_URI,
+			responseType: 'code',
+			scope: 'openid profile email',
+		};
 
-		const stateJwt = await new SignJWT({
-			original_state: originalState,
-			redirect_uri: redirectUri,
-			nonce: nonce,
-			scope: scope,
-			code_challenge: codeChallenge,
-			code_challenge_method: codeChallengeMethod,
-			client_id: TEST_OIDC_CLIENT_ID,
-		})
-			.setProtectedHeader({ alg: 'HS256' })
-			.setIssuedAt()
-			.setIssuer('http://localhost')
-			.setAudience(DISCORD_CLIENT_ID)
-			.setExpirationTime('10m')
-			.sign(decodeBase64Url(STATE_SECRET));
+		const doId = env.OIDC_STATE.idFromName('OIDC_STATE');
+		const oidcState = env.OIDC_STATE.get(doId);
+		await oidcState.storeState(stateId, statePayload);
 
 		const discordAuthCode = 'discord_auth_code';
 
-		const response = await SELF.fetch(`http://localhost/callback?code=${discordAuthCode}&state=${stateJwt}`, { redirect: 'manual' });
+		const response = await SELF.fetch(`http://localhost/callback?code=${discordAuthCode}&state=${stateId}`, {
+			redirect: 'manual',
+		});
 		expect(response.status).toBe(500);
-		const body = await response.text();
+				const body = await response.text();
 		expect(body).toBe('Discord token exchange failed');
-		consoleErrorSpy.mockRestore();
 	});
 });
