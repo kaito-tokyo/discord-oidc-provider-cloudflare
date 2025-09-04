@@ -14,12 +14,12 @@
 		"setup:state_secret": "openssl rand --base64 32 | wrangler secret put STATE_SECRET --env=production"
 	},
 	"dependencies": {
-		"hono": "^4.9.2",
+		"hono": "^4.9.6",
 		"jose": "^6.0.13",
 		"uuid": "^11.1.0"
 	},
 	"devDependencies": {
-		"@cloudflare/vitest-pool-workers": "^0.8.64",
+		"@cloudflare/vitest-pool-workers": "^0.8.69",
 		"@types/uuid": "^10.0.0",
 		"@typescript-eslint/eslint-plugin": "^8.39.1",
 		"@typescript-eslint/parser": "^8.39.1",
